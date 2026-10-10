@@ -28,14 +28,17 @@ export interface ClothingItem {
   layerable: boolean;
   /** Is it clean / available for recommendations today. */
   available: boolean;
-  /** Small data URL thumbnail if added from a photo. */
+  /** Data URL photo of the user's actual item. */
   photo?: string;
+  /** Main colour, used to tint the illustration when there's no photo. */
+  color?: string;
   /** "ai" when created by photo recognition and not yet confirmed. */
   source?: "manual" | "ai" | "ai-confirmed";
 }
 
 export type CommuteMode = "walk" | "transit" | "car" | "bike" | "none";
 
+/** What the user's day looks like. Optional: without one we dress for the whole daytime. */
 export interface Routine {
   /** Hour of day (0-23) the user leaves home. */
   leaveHour: number;
@@ -48,15 +51,27 @@ export interface Routine {
   middayOutdoorMinutes: number;
   /** Indoor environment where most of the day is spent. */
   indoorEnvironment: "heated" | "air-conditioned" | "variable" | "outdoors-job";
-  /** How many times per day the user goes between indoors and outdoors. */
-  transitionsPerDay: number;
+}
+
+/** When a plan applies: one specific date, or certain weekdays every week. */
+export type PlanSchedule =
+  | { kind: "date"; date: string }
+  /** Repeats on the chosen weekdays (0 = Sunday). `every` 2 means every other week, counted from `start`. */
+  | { kind: "weekly"; days: number[]; every?: number; start?: string; until?: string };
+
+/** A named routine with a flexible schedule (e.g. "Class days" every Mon/Wed/Fri, or "Job interview" on Oct 14). */
+export interface Plan extends Routine {
+  id: string;
+  label: string;
+  schedule: PlanSchedule;
 }
 
 export interface Preferences {
   /** -2 runs very hot ... 0 average ... +2 gets cold very easily. */
   coldSensitivity: number;
+  sweatsEasily: boolean;
   dislikesBulk: boolean;
-  style: "casual" | "smart" | "sporty" | "any";
+  sunSensitive: boolean;
 }
 
 export interface Profile {
@@ -64,11 +79,13 @@ export interface Profile {
   city: string;
   latitude: number;
   longitude: number;
-  /** Optional: where the user comes from or what climate they know. */
-  homeClimate?: "tropical" | "arid" | "temperate" | "cold" | "unsure";
-  coldExperience: "none" | "some" | "lots";
-  routine: Routine;
   preferences: Preferences;
+  /** Optional routines. A date-specific plan wins over a weekly one. */
+  plans: Plan[];
+  /** Item the user wants to wear today; outfits are built around it. */
+  pinned?: { itemId: string; date: string };
+  /** Clothes the user would like to own. */
+  wishlist: string[];
   /** Budget in CAD available for wardrobe purchases. */
   budgetCad: number;
   onboarded: boolean;

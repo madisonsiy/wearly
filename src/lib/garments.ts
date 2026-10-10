@@ -17,7 +17,9 @@ export interface GarmentPreset {
 
 export const GARMENT_PRESETS: GarmentPreset[] = [
   // Torso base layers
-  { subtype: "t-shirt", category: "base", warmth: 1, waterResistance: 0, windResistance: 0, layerable: true, aliases: ["tee", "tshirt", "top", "tank top"] },
+  { subtype: "t-shirt", category: "base", warmth: 1, waterResistance: 0, windResistance: 0, layerable: true, aliases: ["tee", "tshirt", "top"] },
+  { subtype: "tank top", category: "base", warmth: 0, waterResistance: 0, windResistance: 0, layerable: true, aliases: ["tank", "camisole", "sleeveless top"] },
+  { subtype: "linen shirt", category: "base", warmth: 1, waterResistance: 0, windResistance: 0, layerable: true, aliases: ["linen top"] },
   { subtype: "long-sleeve shirt", category: "base", warmth: 1, waterResistance: 0, windResistance: 0, layerable: true, aliases: ["long sleeve", "blouse", "button-up shirt", "dress shirt", "shirt", "polo"] },
   { subtype: "thermal top", category: "base", warmth: 2, waterResistance: 0, windResistance: 0, layerable: true, aliases: ["thermal", "base layer", "heattech", "merino top", "long underwear top"] },
   // Mid layers
@@ -39,7 +41,9 @@ export const GARMENT_PRESETS: GarmentPreset[] = [
   { subtype: "winter parka", category: "outer", warmth: 5, waterResistance: 1, windResistance: 2, layerable: true, aliases: ["parka", "winter coat", "winter jacket", "long puffer"] },
   // Bottoms
   { subtype: "shorts", category: "bottom", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false },
-  { subtype: "skirt", category: "bottom", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["dress"] },
+  { subtype: "skirt", category: "bottom", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false },
+  { subtype: "dress", category: "bottom", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["sundress"] },
+  { subtype: "linen pants", category: "bottom", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["linen trousers"] },
   { subtype: "jeans", category: "bottom", warmth: 1, waterResistance: 0, windResistance: 1, layerable: false, aliases: ["denim"] },
   { subtype: "trousers", category: "bottom", warmth: 1, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["pants", "chinos", "slacks", "dress pants"] },
   { subtype: "sweatpants", category: "bottom", warmth: 2, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["joggers", "track pants"] },
@@ -55,7 +59,8 @@ export const GARMENT_PRESETS: GarmentPreset[] = [
   { subtype: "rain boots", category: "footwear", warmth: 1, waterResistance: 2, windResistance: 2, layerable: false, aliases: ["rubber boots", "wellies"] },
   { subtype: "winter boots", category: "footwear", warmth: 4, waterResistance: 2, windResistance: 2, layerable: false, aliases: ["snow boots", "insulated boots"] },
   // Head / hands / neck
-  { subtype: "cap", category: "head", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["baseball cap", "sun hat"] },
+  { subtype: "cap", category: "head", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["baseball cap"] },
+  { subtype: "sun hat", category: "head", warmth: 0, waterResistance: 0, windResistance: 0, layerable: false, aliases: ["bucket hat", "wide brim hat", "straw hat"] },
   { subtype: "toque", category: "head", warmth: 2, waterResistance: 0, windResistance: 1, layerable: false, aliases: ["beanie", "winter hat", "knit hat", "tuque"] },
   { subtype: "gloves", category: "hands", warmth: 2, waterResistance: 0, windResistance: 1, layerable: false, aliases: ["knit gloves"] },
   { subtype: "insulated mittens", category: "hands", warmth: 4, waterResistance: 1, windResistance: 2, layerable: false, aliases: ["mittens", "mitts", "winter gloves", "ski gloves"] },

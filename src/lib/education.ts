@@ -1,7 +1,5 @@
 // Plain-language explanations of Canadian weather and clothing concepts.
 
-import type { Profile } from "./types";
-
 export interface Concept {
   key: string;
   title: string;
@@ -56,6 +54,23 @@ export const CONCEPTS: Concept[] = [
     ],
   },
   {
+    key: "humidex", title: "Humidex (summer feels-like)",
+    short: "Humidity makes hot days feel hotter, because sweat can't evaporate.",
+    body: [
+      "Canadian summers are often humid. 28°C with high humidity can feel like 35°C or more.",
+      "Wear loose, light-coloured clothes in cotton or linen, drink water, and take breaks in the shade or air conditioning.",
+      "Buildings, buses and malls are often strongly air-conditioned, so a light layer in your bag is handy.",
+    ],
+  },
+  {
+    key: "storms", title: "Thunderstorms",
+    short: "Summer storms can arrive fast, with heavy rain and lightning.",
+    body: [
+      "If you hear thunder, go indoors. Umbrellas aren't safe in lightning.",
+      "A packable rain jacket is more useful than an umbrella on stormy, windy days.",
+    ],
+  },
+  {
     key: "frostbite", title: "Frostbite",
     short: "Skin freezing. Ears, nose, cheeks, fingers and toes are most at risk.",
     body: [
@@ -92,30 +107,3 @@ export const CONCEPTS: Concept[] = [
 
 export const conceptByKey = (k: string) => CONCEPTS.find((c) => c.key === k);
 
-/** Personalised welcome advice based on where the user comes from. Never assumes a budget. */
-export function onboardingAdvice(profile: Pick<Profile, "homeClimate" | "coldExperience" | "budgetCad">): string[] {
-  const out: string[] = [];
-  switch (profile.homeClimate) {
-    case "tropical":
-      out.push("Coming from a warm climate, your body isn't used to the cold yet. Most people feel colder in their first winter, so we'll recommend slightly warmer outfits until you tell us otherwise.");
-      break;
-    case "arid":
-      out.push("You may be used to big day-to-night temperature swings, which helps. The new parts will be wind, snow and wet slush, so we'll focus on wind and water protection.");
-      break;
-    case "temperate":
-      out.push("You'll recognise fall and spring, but Canadian winters are usually colder and longer. We'll flag the days that need real winter gear.");
-      break;
-    case "cold":
-      out.push("You already know cold weather. We'll focus on local specifics like wind chill warnings, slush and heated indoor spaces.");
-      break;
-    default:
-      out.push("We'll explain new weather terms as they come up, so you can learn as you go.");
-  }
-  if (profile.coldExperience === "none") {
-    out.push("You don't need to buy a full winter wardrobe at once. Start with what you own, and we'll tell you which one or two items make the biggest difference first.");
-  }
-  if (profile.budgetCad > 0 && profile.budgetCad < 150) {
-    out.push("With a tight budget, second-hand stores and community clothing drives can stretch your money a long way. We'll prioritise the cheapest items that make the biggest difference.");
-  }
-  return out;
-}

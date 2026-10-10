@@ -19,6 +19,10 @@ export interface GapNeed {
   partial?: (i: ClothingItem) => boolean;
   /** Feels-like (°C) at or below which this item becomes needed. */
   neededBelow?: number;
+  /** Feels-like (°C) at or above which this item becomes needed. */
+  neededAbove?: number;
+  /** UV index at or above which this item becomes needed. */
+  uvAbove?: number;
   /** Needed when wet weather is expected. */
   wet?: boolean;
 }
@@ -109,6 +113,30 @@ export const NEEDS: GapNeed[] = [
     covers: (i) => i.category === "accessory" && /sock/.test(txt(i)) && i.warmth >= 2,
   },
   {
+    key: "rain-footwear", label: "Water-resistant shoes", season: "Spring and fall",
+    why: "Canvas sneakers soak through in rain and puddles. Leather or rubber shoes keep feet dry year-round.",
+    baseImportance: "recommended", wet: true,
+    covers: (i) => i.category === "footwear" && i.waterResistance >= 1,
+  },
+  {
+    key: "light-layer", label: "Light layer (cardigan or light jacket)", season: "Year-round",
+    why: "Spring and fall mornings are cool, and summer air conditioning can be chilly. A light layer covers both.",
+    baseImportance: "recommended",
+    covers: (i) => (i.category === "mid" || i.category === "outer") && i.warmth <= 2 && i.layerable,
+  },
+  {
+    key: "summer-bottoms", label: "Shorts, skirt or light pants", season: "Jun to Aug",
+    why: "Summer in most Canadian cities is hot and humid. Jeans get uncomfortable above about 28°C.",
+    baseImportance: "recommended", neededAbove: 26,
+    covers: (i) => i.category === "bottom" && /short|skirt|dress|linen/.test(txt(i)),
+  },
+  {
+    key: "sun-hat", label: "Sun hat or cap", season: "May to Sep",
+    why: "Summer UV is often 7 or higher. A hat shades your face and keeps you cooler.",
+    baseImportance: "optional", uvAbove: 6,
+    covers: (i) => i.category === "head" && /cap|sun hat|bucket/.test(txt(i)),
+  },
+  {
     key: "sunglasses", label: "Sunglasses", season: "Year-round",
     why: "Summer UV is strong, and sun on snow is very bright in winter.",
     baseImportance: "optional",
@@ -120,11 +148,14 @@ const IMPORTANCE_SCORE: Record<GapImportance, number> = { essential: 60, recomme
 
 /** Detect wardrobe gaps, prioritised by importance, exposure and this week's forecast. */
 export function detectGaps(wardrobe: ClothingItem[], profile: Profile, forecast?: Forecast): WardrobeGap[] {
-  const r = profile.routine;
-  const dailyOutdoor = (r.commuteMode === "none" ? 0 : r.commuteOutdoorMinutes * 2) + r.middayOutdoorMinutes + (r.indoorEnvironment === "outdoors-job" ? 240 : 0);
-  const exposedCommute = r.commuteMode === "walk" || r.commuteMode === "transit" || r.commuteMode === "bike";
+  // Without a weekly plan, assume a typical day out on foot or transit (about an hour outside).
+  const r = (profile.plans ?? []).find((p) => p.schedule.kind === "weekly");
+  const dailyOutdoor = r ? (r.commuteMode === "none" ? 0 : r.commuteOutdoorMinutes * 2) + r.middayOutdoorMinutes + (r.indoorEnvironment === "outdoors-job" ? 240 : 0) : 60;
+  const exposedCommute = !r || r.commuteMode === "walk" || r.commuteMode === "transit" || r.commuteMode === "bike";
   const weekMinFeels = forecast ? Math.min(...forecast.daily.map((d) => d.feelsLikeMin)) : Infinity;
   const weekWet = forecast ? forecast.daily.some((d) => d.precipitationProbabilityMax >= 50) : false;
+  const weekMaxFeels = forecast ? Math.max(...forecast.daily.map((d) => d.feelsLikeMax)) : -Infinity;
+  const weekMaxUv = forecast ? Math.max(...forecast.daily.map((d) => d.uvIndexMax)) : 0;
 
   const gaps = NEEDS.map((need): WardrobeGap => {
     const coveredBy = wardrobe.filter(need.covers).map((i) => i.name);
@@ -136,10 +167,16 @@ export function detectGaps(wardrobe: ClothingItem[], profile: Profile, forecast?
     if (need.key === "thermal-top" || need.key === "thermal-bottoms") {
       if (profile.preferences.coldSensitivity >= 1 || dailyOutdoor >= 60) importance = "recommended";
     }
-    if (need.key === "winter-boots" && r.commuteMode === "car" && dailyOutdoor < 20) importance = "recommended";
+    if (need.key === "winter-boots" && r?.commuteMode === "car" && dailyOutdoor < 20) importance = "recommended";
     if (need.key === "scarf" && (dailyOutdoor >= 40 || profile.preferences.coldSensitivity >= 1)) importance = "essential";
 
-    const neededThisWeek = Boolean((need.neededBelow !== undefined && weekMinFeels <= need.neededBelow) || (need.wet && weekWet));
+    const neededThisWeek = Boolean(
+      (need.neededBelow !== undefined && weekMinFeels <= need.neededBelow) ||
+      (need.neededAbove !== undefined && weekMaxFeels >= need.neededAbove) ||
+      (need.uvAbove !== undefined && weekMaxUv >= need.uvAbove) ||
+      (need.wet && weekWet),
+    );
+    if (need.key === "sun-hat" && profile.preferences.sunSensitive) importance = "recommended";
 
     let priority = IMPORTANCE_SCORE[importance];
     priority += Math.min(20, dailyOutdoor / 6);
@@ -160,6 +197,10 @@ export function detectGaps(wardrobe: ClothingItem[], profile: Profile, forecast?
         scarf: "Zip your jacket all the way up or wear a hoodie.",
         "warm-mid": "Layer two thinner tops instead.",
         "rain-jacket": "Use an umbrella when it isn't windy.",
+        "rain-footwear": "Pack dry socks on rainy days.",
+        "summer-bottoms": "Wear your thinnest pants and roll them up.",
+        "sun-hat": "Sunscreen and shady routes.",
+        "light-layer": "Carry a long-sleeve shirt.",
       };
       workaround = wk[need.key];
     }
@@ -168,4 +209,21 @@ export function detectGaps(wardrobe: ClothingItem[], profile: Profile, forecast?
   });
 
   return gaps.sort((a, b) => b.priority - a.priority);
+}
+
+export interface WishlistVerdict {
+  wish: string;
+  gap?: WardrobeGap;
+  verdict: "fills-gap" | "already-covered" | "nice-to-have";
+  note: string;
+}
+
+/** Check a wished-for item against the wardrobe: does it fill a real gap, or do you already own something that does the job? */
+export function evaluateWish(wish: string, gaps: WardrobeGap[], toItem: (w: string) => ClothingItem | undefined): WishlistVerdict {
+  const item = toItem(wish);
+  const need = item ? NEEDS.find((n) => n.covers(item)) : undefined;
+  const gap = need ? gaps.find((g) => g.key === need.key) : undefined;
+  if (!gap) return { wish, verdict: "nice-to-have", note: "Doesn't fill a weather gap, so buy it whenever you like." };
+  if (gap.status === "covered") return { wish, gap, verdict: "already-covered", note: `Your ${gap.coveredBy[0]} already does this job.` };
+  return { wish, gap, verdict: "fills-gap", note: `Fills ${gap.importance === "essential" ? "an" : "a"} ${gap.importance} gap: ${gap.label.toLowerCase()}.` };
 }

@@ -3,10 +3,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Wearly",
-  description: "Dress for Canadian weather with the clothes you already own.",
+  description: "What to wear today, with the clothes you already own.",
+  appleWebApp: { capable: true, title: "Wearly", statusBarStyle: "default" },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#1f6feb" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

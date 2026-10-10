@@ -1,7 +1,7 @@
 // Weather data (Open-Meteo, free and keyless) and rule-based day analysis.
 // Real forecast data is the source of truth; nothing here asks a model to guess.
 
-import type { DailyWeather, Forecast, HourlyWeather, Profile, Routine } from "./types";
+import type { DailyWeather, Forecast, HourlyWeather, Plan, Preferences, Profile, Routine } from "./types";
 
 const HOURLY_VARS = [
   "temperature_2m",
@@ -132,6 +132,41 @@ const WMO: Record<number, string> = {
 export const describeWeatherCode = (code: number): string => WMO[code] ?? "Unknown";
 export const isFreezingPrecip = (code: number) => [56, 57, 66, 67].includes(code);
 export const isSnowCode = (code: number) => [71, 73, 75, 77, 85, 86].includes(code);
+export const isThunderCode = (code: number) => code >= 95;
+
+export function weatherEmoji(code: number): string {
+  if (code === 0 || code === 1) return "☀️";
+  if (code === 2) return "⛅";
+  if (code === 3) return "☁️";
+  if (code === 45 || code === 48) return "🌫️";
+  if (isThunderCode(code)) return "⛈️";
+  if (isSnowCode(code)) return "🌨️";
+  if (code >= 51) return "🌧️";
+  return "🌤️";
+}
+
+/** The plan that applies on a date: a date-specific plan wins over a weekly one. */
+const dayNumber = (date: string) => Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000);
+/** Week number with weeks starting on Sunday (1970-01-01 was a Thursday). */
+const weekNumber = (date: string) => Math.floor((dayNumber(date) + 4) / 7);
+
+/** Does a plan apply on this date? */
+export function planMatches(plan: Plan, date: string): boolean {
+  const s = plan.schedule;
+  if (s.kind === "date") return s.date === date;
+  if (!s.days.includes(new Date(`${date}T12:00`).getDay())) return false;
+  if (s.start && date < s.start) return false;
+  if (s.until && date > s.until) return false;
+  const every = Math.max(1, s.every ?? 1);
+  if (every > 1 && s.start) return (((weekNumber(date) - weekNumber(s.start)) % every) + every) % every === 0;
+  return true;
+}
+
+/** The plan for a date: a one-day plan wins over a repeating one. */
+export function activePlan(profile: Pick<Profile, "plans">, date: string): Plan | undefined {
+  const plans = profile.plans ?? [];
+  return plans.find((p) => p.schedule.kind === "date" && planMatches(p, date)) ?? plans.find((p) => p.schedule.kind === "weekly" && planMatches(p, date));
+}
 
 export interface ExposureSegment {
   label: string;
@@ -169,6 +204,12 @@ export interface DayAnalysis {
   maxWind: number;
   maxGust: number;
   maxUv: number;
+  hottestFeelsLike: number;
+  /** Hottest feels-like adjusted for sweating / running warm. */
+  heatTemp: number;
+  thunder: boolean;
+  /** Whether a personal plan was used (otherwise a general day out). */
+  personalized: boolean;
   /** Feels-like range across the whole waking day, for layering advice. */
   daySwing: number;
   needsRainProtection: boolean;
@@ -185,27 +226,31 @@ function atHour(hours: HourlyWeather[], hour: number): HourlyWeather | undefined
   return hours.find((h) => Number(h.time.slice(11, 13)) === hour) ?? hours[Math.min(Math.max(hour, 0), hours.length - 1)];
 }
 
-/** Build the list of times the user is actually outside, from their routine. */
-export function exposureSegments(routine: Routine, hours: HourlyWeather[]): ExposureSegment[] {
+/**
+ * Times the user is outside. With a routine we follow it; without one we assume a
+ * general day out and check morning, afternoon and evening.
+ */
+export function exposureSegments(routine: Routine | undefined, hours: HourlyWeather[]): ExposureSegment[] {
   const segs: { label: string; hour: number; minutes: number }[] = [];
-  if (routine.commuteMode !== "none" && routine.commuteOutdoorMinutes > 0) {
-    segs.push({ label: "Morning commute", hour: routine.leaveHour, minutes: routine.commuteOutdoorMinutes });
-  }
-  if (routine.middayOutdoorMinutes > 0) {
-    const mid = Math.round((routine.leaveHour + routine.returnHour) / 2);
-    segs.push({ label: "Midday outdoors", hour: mid, minutes: routine.middayOutdoorMinutes });
-  }
-  if (routine.commuteMode !== "none" && routine.commuteOutdoorMinutes > 0) {
-    segs.push({ label: "Evening commute", hour: routine.returnHour, minutes: routine.commuteOutdoorMinutes });
-  }
-  if (routine.indoorEnvironment === "outdoors-job") {
-    for (let hr = routine.leaveHour + 1; hr < routine.returnHour; hr += 3) {
-      segs.push({ label: `Working outside (${hr}:00)`, hour: hr, minutes: 120 });
+  if (!routine) {
+    segs.push({ label: "Morning", hour: 8, minutes: 20 }, { label: "Afternoon", hour: 14, minutes: 20 }, { label: "Evening", hour: 19, minutes: 20 });
+  } else {
+    if (routine.commuteMode !== "none" && routine.commuteOutdoorMinutes > 0) {
+      segs.push({ label: "Heading out", hour: routine.leaveHour, minutes: routine.commuteOutdoorMinutes });
     }
-  }
-  if (segs.length === 0) {
-    // Even a homebody steps outside occasionally; assume a short errand at noon.
-    segs.push({ label: "Short errand", hour: 12, minutes: 10 });
+    if (routine.middayOutdoorMinutes > 0) {
+      const mid = Math.round((routine.leaveHour + routine.returnHour) / 2);
+      segs.push({ label: "Midday", hour: mid, minutes: routine.middayOutdoorMinutes });
+    }
+    if (routine.commuteMode !== "none" && routine.commuteOutdoorMinutes > 0) {
+      segs.push({ label: "Heading home", hour: routine.returnHour, minutes: routine.commuteOutdoorMinutes });
+    }
+    if (routine.indoorEnvironment === "outdoors-job") {
+      for (let hr = routine.leaveHour + 1; hr < routine.returnHour; hr += 3) {
+        segs.push({ label: `Working outside (${hr}:00)`, hour: hr, minutes: 120 });
+      }
+    }
+    if (segs.length === 0) segs.push({ label: "Short errand", hour: 12, minutes: 10 });
   }
   return segs
     .map((s) => {
@@ -218,15 +263,14 @@ export function exposureSegments(routine: Routine, hours: HourlyWeather[]): Expo
 }
 
 /** Rule-based analysis of a day's weather against the user's routine. */
-export function analyzeDay(forecast: Forecast, profile: Pick<Profile, "routine" | "preferences">, date?: string): DayAnalysis {
+export function analyzeDay(forecast: Forecast, preferences: Preferences, routine?: Routine, date?: string): DayAnalysis {
   const day = date ?? forecast.daily[0]?.date ?? forecast.hourly[0]?.time.slice(0, 10) ?? "";
   const hours = hoursForDate(forecast, day);
-  const { routine, preferences } = profile;
   const segments = exposureSegments(routine, hours.length ? hours : forecast.hourly.slice(0, 24));
 
   const waking = hours.filter((h) => {
     const hr = Number(h.time.slice(11, 13));
-    return hr >= Math.min(routine.leaveHour, 7) && hr <= Math.max(routine.returnHour, 20);
+    return routine ? hr >= routine.leaveHour && hr <= routine.returnHour : hr >= 7 && hr <= 21;
   });
   const outdoorWindowHours = waking.length ? waking : hours;
 
@@ -242,7 +286,12 @@ export function analyzeDay(forecast: Forecast, profile: Pick<Profile, "routine" 
   else if (coldestSeg.minutes <= 10) exposureAdj = 1.5;
   else if (coldestSeg.minutes >= 60) exposureAdj = -3;
   else if (coldestSeg.minutes >= 30) exposureAdj = -1.5;
-  const dressingTemp = Math.round((coldestFeelsLike + exposureAdj - 2.5 * preferences.coldSensitivity) * 10) / 10;
+  // Feeling the cold matters most when it's actually cold.
+  const sensitivityShift = (coldestFeelsLike < 15 ? 2.5 : 1) * preferences.coldSensitivity;
+  const dressingTemp = Math.round((coldestFeelsLike + exposureAdj - sensitivityShift) * 10) / 10;
+  // Heat: the hottest time you're outside, nudged up if you sweat easily or run warm.
+  const hottestFeelsLike = Math.max(...outdoorWindowHours.map((h) => h.feelsLike), warmestFeelsLike);
+  const heatTemp = Math.round((hottestFeelsLike + (preferences.sweatsEasily ? 2 : 0) - 1.5 * Math.min(0, preferences.coldSensitivity)) * 10) / 10;
 
   const segHours = segments.map((s) => s.weather);
   const maxPrecipProbability = Math.max(0, ...segHours.map((h) => h.precipitationProbability));
@@ -258,9 +307,22 @@ export function analyzeDay(forecast: Forecast, profile: Pick<Profile, "routine" 
 
   const needsRainProtection = maxPrecipProbability >= 40 || segHours.some((h) => h.precipitation >= 0.3);
   const needsWindProtection = maxWind >= 25 || maxGust >= 45;
-  const needsSunProtection = maxUv >= 6 && totalOutdoorMinutes >= 20;
+  const needsSunProtection = (maxUv >= 6 || (maxUv >= 3 && preferences.sunSensitive)) && totalOutdoorMinutes >= 15;
+  const thunder = outdoorWindowHours.some((h) => isThunderCode(h.weatherCode));
+  const fog = outdoorWindowHours.some((h) => h.weatherCode === 45 || h.weatherCode === 48);
 
   const alerts: WeatherAlert[] = [];
+  if (hottestFeelsLike >= 40) {
+    alerts.push({ id: "heat-severe", severity: "danger", learn: "humidex", title: `Extreme heat: feels like ${Math.round(hottestFeelsLike)}°C`, detail: "Limit time outside in the afternoon, drink water often, and wear loose, light-coloured clothes." });
+  } else if (hottestFeelsLike >= 33) {
+    alerts.push({ id: "heat", severity: "warning", learn: "humidex", title: `Hot and humid: feels like ${Math.round(hottestFeelsLike)}°C`, detail: "Wear loose, breathable clothes and bring water." });
+  } else if (hottestFeelsLike >= 28) {
+    alerts.push({ id: "warm", severity: "info", learn: "humidex", title: `Warm: feels like ${Math.round(hottestFeelsLike)}°C`, detail: "Light, breathable clothes. Humidity makes it feel hotter than the thermometer says." });
+  }
+  if (thunder) {
+    alerts.push({ id: "thunder", severity: "warning", learn: "storms", title: "Thunderstorms possible", detail: "Have a rain layer handy and head indoors if you hear thunder. Umbrellas aren't safe in lightning." });
+  }
+  if (fog) alerts.push({ id: "fog", severity: "info", title: "Foggy at times", detail: "Lower visibility. Bright or reflective clothing helps if you're walking or biking." });
   const risk = frostbiteRisk(coldestFeelsLike);
   if (risk.level === "extreme" || risk.level === "very-high") {
     alerts.push({
@@ -330,7 +392,7 @@ export function analyzeDay(forecast: Forecast, profile: Pick<Profile, "routine" 
       detail: "Wear layers you can take off and carry. Mornings and evenings will feel very different from midday.",
     });
   }
-  if (routine.indoorEnvironment === "heated" && coldestFeelsLike < 5) {
+  if (routine?.indoorEnvironment === "heated" && coldestFeelsLike < 5) {
     alerts.push({
       id: "indoor-heat", severity: "info", learn: "layering",
       title: "Heated indoors, cold outdoors",
@@ -353,6 +415,10 @@ export function analyzeDay(forecast: Forecast, profile: Pick<Profile, "routine" 
     maxWind,
     maxGust,
     maxUv,
+    hottestFeelsLike,
+    heatTemp,
+    thunder,
+    personalized: Boolean(routine),
     daySwing,
     needsRainProtection,
     needsWindProtection,

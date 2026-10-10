@@ -1,6 +1,7 @@
-// Rule-based outfit engine. It only ever picks clothes the user owns and has marked
-// available, scores every sensible layering combination against the day's needs,
-// and states plainly when the best available combination falls short.
+// Rule-based outfit engine for every season. It only picks clothes the user owns
+// and has marked available, scores every sensible layering combination against
+// the day's cold, heat, rain, wind and sun, and states plainly when the best
+// available combination falls short, with a workaround for each gap.
 
 import type { ClothingItem, Preferences, Routine } from "./types";
 import type { DayAnalysis } from "./weather";
@@ -15,7 +16,10 @@ export interface OutfitPick {
 
 export interface Limitation {
   severity: "info" | "caution" | "warning" | "danger";
+  /** What's missing or not ideal, in a few words. */
   text: string;
+  /** How to make do with what the user owns. */
+  workaround?: string;
   /** Wardrobe gap this limitation points to (see gaps.ts). */
   gapKey?: string;
 }
@@ -26,10 +30,13 @@ export interface OutfitRecommendation {
   torsoWarmth: number;
   torsoTarget: number;
   status: OutfitStatus;
+  /** One short sentence for the dashboard. */
+  headline: string;
+  /** Short reasons this outfit works (shown on demand). */
+  why: string[];
   limitations: Limitation[];
-  improvisations: string[];
+  /** Short tips for changes through the day. */
   dayPlan: string[];
-  summary: string;
 }
 
 export interface OutfitResult {
@@ -67,6 +74,9 @@ const has = (i: ClothingItem, ...words: string[]) => {
 const isThermal = (i: ClothingItem) => has(i, "thermal", "base layer", "merino", "heattech", "long john", "long underwear");
 const isShell = (i: ClothingItem) => i.category === "outer" && i.windResistance === 2 && i.warmth <= 1;
 const hasHood = (i: ClothingItem) => has(i, "hood", "parka", "rain jacket", "raincoat");
+const isLightBottom = (i: ClothingItem) => has(i, "short", "skirt", "dress", "linen");
+const isShortSleeve = (i: ClothingItem) => has(i, "t-shirt", "tee", "tank", "short sleeve", "polo");
+const TORSO = new Set(["base", "mid", "outer"]);
 
 function combos<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];
@@ -77,6 +87,15 @@ function combos<T>(arr: T[], k: number): T[][] {
   return out;
 }
 
+interface Ctx {
+  a: DayAnalysis;
+  prefs: Preferences;
+  routine?: Routine;
+  umbrella: boolean;
+  hot: boolean; // hottest part of the day calls for light clothing
+  warm: boolean;
+}
+
 interface TorsoCombo {
   layers: ClothingItem[];
   effective: number;
@@ -85,58 +104,50 @@ interface TorsoCombo {
   deficit: number;
 }
 
-function evaluateTorso(
-  layers: ClothingItem[],
-  target: number,
-  a: DayAnalysis,
-  prefs: Preferences,
-  routine: Routine,
-  umbrella: boolean,
-): TorsoCombo {
+function evaluateTorso(layers: ClothingItem[], target: number, c: Ctx): TorsoCombo {
+  const { a, prefs } = c;
   const raw = layers.reduce((s, i) => s + i.warmth, 0);
   const maxWind = Math.max(0, ...layers.map((i) => i.windResistance));
   const outerWater = Math.max(0, ...layers.filter((i) => i.category === "outer").map((i) => i.waterResistance));
   let penalty = 0;
-  if (a.needsWindProtection || a.maxWind >= 20) {
+  if (a.coldestFeelsLike < 15 && (a.needsWindProtection || a.maxWind >= 20)) {
     if (maxWind === 0) penalty += a.maxWind >= 40 ? 2 : 1;
     else if (maxWind === 1 && a.maxWind >= 40) penalty += 1;
   }
   // Rain soaking through non-water-resistant layers removes insulation.
-  if (a.needsRainProtection && outerWater === 0 && !umbrella && target >= 3) penalty += 1;
+  if (a.needsRainProtection && outerWater === 0 && !c.umbrella && target >= 3) penalty += 1;
   const effective = Math.max(0, raw - penalty);
   const deficit = Math.max(0, target - effective);
   const surplus = Math.max(0, effective - target);
   const bulk = prefs.dislikesBulk ? 2 : 1;
+  const base = layers.filter((i) => i.category === "base");
 
-  let score = -5 * deficit - surplus * (prefs.dislikesBulk ? 1.5 : 1) - (layers.length - 1) * 0.35 * bulk;
+  let score = -5 * deficit - surplus * (prefs.dislikesBulk || prefs.sweatsEasily ? 1.5 : 1) - (layers.length - 1) * 0.35 * bulk;
   if ((a.needsWindProtection || a.coldestFeelsLike < 0) && maxWind === 2) score += 1.5;
   if (a.needsRainProtection && outerWater >= 1) score += 2;
   if (a.needsRainProtection && outerWater === 2) score += 0.5;
+  // Heat: the base layer stays on all day, so keep it light.
+  if (c.hot) {
+    for (const b of base) score += isShortSleeve(b) ? 1 : -1 - b.warmth;
+  } else if (c.warm) {
+    for (const b of base) if (isThermal(b)) score -= 2;
+  }
   // In heated buildings, warmth should live in layers you take off at the door.
-  const base = layers.filter((i) => i.category === "base");
-  if (routine.indoorEnvironment === "heated" && base.some(isThermal) && target < 8) score -= 1;
+  if (c.routine?.indoorEnvironment === "heated" && base.some(isThermal) && target < 8) score -= 1;
   if (base.length === 0) score -= 3;
   if (base.length === 2 && !base.some(isThermal)) score -= 2;
   return { layers, effective, raw, score, deficit };
 }
 
-function bestTorso(
-  wardrobe: ClothingItem[],
-  target: number,
-  a: DayAnalysis,
-  prefs: Preferences,
-  routine: Routine,
-  umbrella: boolean,
-  exclude: Set<string>,
-): TorsoCombo | undefined {
-  const pool = wardrobe.filter((i) => !exclude.has(i.id));
+function bestTorso(wardrobe: ClothingItem[], target: number, c: Ctx, exclude: Set<string>, pinned?: ClothingItem): TorsoCombo | undefined {
+  const pool = wardrobe.filter((i) => !exclude.has(i.id) || i.id === pinned?.id);
   const bases = pool.filter((i) => i.category === "base");
   const mids = pool.filter((i) => i.category === "mid");
   const outers = pool.filter((i) => i.category === "outer");
 
-  const baseSets: ClothingItem[][] = [...combos(bases, 1), ...combos(bases, 2).filter((c) => c.some(isThermal))];
+  const baseSets: ClothingItem[][] = [...combos(bases, 1), ...combos(bases, 2).filter((s) => s.some(isThermal))];
   if (baseSets.length === 0) baseSets.push([]);
-  const midSets = [[], ...combos(mids, 1), ...combos(mids, 2).filter((c) => c.every((i) => i.layerable))];
+  const midSets = [[], ...combos(mids, 1), ...combos(mids, 2).filter((s) => s.every((i) => i.layerable))];
   const outerSets: ClothingItem[][] = [[], ...combos(outers, 1)];
   // A thin windproof shell over another jacket is a legitimate improvised layer.
   for (const pair of combos(outers, 2)) if (pair.some(isShell)) outerSets.push(pair);
@@ -145,13 +156,16 @@ function bestTorso(
   for (const b of baseSets)
     for (const m of midSets)
       for (const o of outerSets) {
-        const c = evaluateTorso([...b, ...m, ...o], target, a, prefs, routine, umbrella);
-        if (!best || c.score > best.score || (c.score === best.score && c.layers.length < best.layers.length)) best = c;
+        const layers = [...b, ...m, ...o];
+        if (pinned && TORSO.has(pinned.category) && !layers.some((l) => l.id === pinned.id)) continue;
+        const r = evaluateTorso(layers, target, c);
+        if (!best || r.score > best.score || (r.score === best.score && r.layers.length < best.layers.length)) best = r;
       }
   return best;
 }
 
-function pickBest(items: ClothingItem[], score: (i: ClothingItem) => number): ClothingItem | undefined {
+function pickBest(items: ClothingItem[], score: (i: ClothingItem) => number, pinned?: ClothingItem): ClothingItem | undefined {
+  if (pinned && items.some((i) => i.id === pinned.id)) return pinned;
   let best: ClothingItem | undefined;
   let bs = -Infinity;
   for (const i of items) {
@@ -164,84 +178,83 @@ function pickBest(items: ClothingItem[], score: (i: ClothingItem) => number): Cl
   return best;
 }
 
-const slotFor = (i: ClothingItem, outerCount: number, idx: number): string => {
-  switch (i.category) {
-    case "base": return isThermal(i) ? "Base layer (thermal)" : "Base layer";
-    case "mid": return "Mid layer";
-    case "outer": return outerCount > 1 ? (isShell(i) ? "Outer shell" : "Insulating jacket") : idx >= 0 ? "Outer layer" : "Outer layer";
-    default: return i.category;
-  }
-};
-
 const fmt = (n: number) => `${Math.round(n)}°C`;
 const listJoin = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
-/** Build one recommendation, excluding some items (used for alternatives). */
 function buildOutfit(
   wardrobeAll: ClothingItem[],
   a: DayAnalysis,
   prefs: Preferences,
-  routine: Routine,
+  routine: Routine | undefined,
   exclude: Set<string>,
   title: string,
+  pinnedId?: string,
 ): OutfitRecommendation | undefined {
   const wardrobe = wardrobeAll.filter((i) => i.available);
+  const pinned = wardrobe.find((i) => i.id === pinnedId);
   const t = a.dressingTemp;
-  const target = torsoTarget(t);
+  const hot = a.heatTemp >= 27;
+  const warm = a.heatTemp >= 22;
+  // On a hot day with a mild morning, a single light top is enough; extra layers just get carried.
+  const target = hot && t >= 17 ? 1 : torsoTarget(t);
   const picks: OutfitPick[] = [];
   const limitations: Limitation[] = [];
-  const improvisations: string[] = [];
+  const why: string[] = [];
 
   const umbrella = wardrobe.find((i) => i.category === "accessory" && has(i, "umbrella"));
-  const torso = bestTorso(wardrobe, target, a, prefs, routine, Boolean(umbrella), exclude);
+  const c: Ctx = { a, prefs, routine, umbrella: Boolean(umbrella), hot, warm };
+  const torso = bestTorso(wardrobe, target, c, exclude, pinned);
   if (!torso) return undefined;
   const outers = torso.layers.filter((i) => i.category === "outer");
   for (const i of torso.layers) {
     let reason = `Warmth ${i.warmth}/5`;
-    if (i.category === "outer" && i.windResistance === 2) reason += ", blocks wind";
-    if (i.category === "outer" && i.waterResistance >= 1) reason += i.waterResistance === 2 ? ", waterproof" : ", sheds light rain";
-    if (i.category === "base" && isThermal(i)) reason = "Thin thermal traps heat without bulk";
-    if (i.category === "mid") reason = `Insulation you can take off indoors (warmth ${i.warmth}/5)`;
-    picks.push({ slot: slotFor(i, outers.length, 0), item: i, reason });
+    let slot = i.category === "base" ? "Top" : i.category === "mid" ? "Layer" : "Jacket";
+    if (i.category === "base" && isThermal(i)) reason = "Thin thermal, warm without bulk";
+    else if (i.category === "base" && hot) reason = "Light and breathable";
+    if (i.category === "mid") reason = "Easy to take off when it warms up";
+    if (i.category === "outer") {
+      const bits = [i.windResistance === 2 && "blocks wind", i.waterResistance === 2 ? "waterproof" : i.waterResistance === 1 && "sheds light rain"].filter(Boolean);
+      reason = bits.length ? `Warmth ${i.warmth}/5, ${bits.join(", ")}` : reason;
+      if (outers.length > 1) slot = isShell(i) ? "Shell" : "Jacket";
+    }
+    picks.push({ slot, item: i, reason });
   }
 
   // Legs
   const lt = legsTarget(t);
   const bottoms = wardrobe.filter((i) => i.category === "bottom");
-  const outerBottoms = bottoms.filter((i) => !i.layerable || !has(i, "legging", "thermal", "tights", "long john"));
-  const underBottoms = bottoms.filter((i) => i.layerable && has(i, "legging", "thermal", "tights", "long john"));
+  const isUnder = (i: ClothingItem) => i.layerable && has(i, "legging", "thermal", "tights", "long john");
+  const outerBottoms = bottoms.filter((i) => !isUnder(i));
   const mainBottom = pickBest(outerBottoms.length ? outerBottoms : bottoms, (i) => {
-    const d = Math.abs(i.warmth - lt) * 2 + (i.warmth < lt ? 2 : 0);
-    let s = -d;
+    let s = -Math.abs(i.warmth - lt) * 2 - (i.warmth < lt ? 2 : 0);
     if (a.needsRainProtection && i.waterResistance > 0) s += 0.5;
-    if (t >= 20 && has(i, "shorts", "skirt")) s += 1;
+    if (hot && isLightBottom(i)) s += 3;
+    if (hot && i.warmth >= 2) s -= 2;
     return s;
-  });
-  let legWarmth = 0;
+  }, pinned);
   if (mainBottom) {
-    picks.push({ slot: "Bottoms", item: mainBottom, reason: `Warmth ${mainBottom.warmth}/5 for legs` });
-    legWarmth = mainBottom.warmth;
+    picks.push({ slot: "Bottoms", item: mainBottom, reason: hot && isLightBottom(mainBottom) ? "Cool for the heat" : `Warmth ${mainBottom.warmth}/5` });
+    let legWarmth = mainBottom.warmth;
     if (legWarmth < lt) {
-      const under = pickBest(underBottoms.filter((i) => i.id !== mainBottom.id), (i) => i.warmth);
+      const under = pickBest(bottoms.filter((i) => isUnder(i) && i.id !== mainBottom.id), (i) => i.warmth);
       if (under) {
-        picks.push({ slot: "Under layer (legs)", item: under, reason: `Worn underneath ${mainBottom.name} for extra warmth` });
+        picks.push({ slot: "Under", item: under, reason: `Under your ${mainBottom.name} for warmth` });
         legWarmth += under.warmth;
       }
     }
     if (legWarmth < lt) {
       limitations.push({
         severity: lt - legWarmth >= 2 ? "warning" : "caution",
-        text: `Your legs will feel the cold: best available leg warmth is ${legWarmth} vs ${lt} recommended.`,
+        text: "Legs will be cold",
+        workaround: isLightBottom(mainBottom) ? "Add tights or leggings underneath." : "Wear leggings or pyjama pants under your pants.",
         gapKey: "thermal-bottoms",
       });
-      improvisations.push(
-        has(mainBottom, "skirt", "dress", "shorts")
-          ? "Swap to long pants if you can, or add tights/leggings underneath."
-          : "Leggings or pyjama-style pants under your regular pants add a surprising amount of warmth.",
-      );
+    }
+    if (hot && !isLightBottom(mainBottom) && mainBottom.warmth >= 1) {
+      limitations.push({ severity: "info", text: `${mainBottom.name} will feel hot`, workaround: "Pick your thinnest, loosest pants and roll up the legs.", gapKey: "summer-bottoms" });
     }
   } else {
-    limitations.push({ severity: "caution", text: "No bottoms marked available in your wardrobe." });
+    limitations.push({ severity: "caution", text: "No bottoms available", workaround: "Add some to your closet or mark them available." });
   }
 
   // Feet
@@ -249,42 +262,36 @@ function buildOutfit(
   const needWaterFeet = a.snowExpected ? 2 : a.needsRainProtection ? 1 : 0;
   const shoes = wardrobe.filter((i) => i.category === "footwear");
   const socks = wardrobe.filter((i) => i.category === "accessory" && has(i, "sock"));
-  const warmSocks = pickBest(socks, (i) => i.warmth);
   const shoe = pickBest(shoes, (i) => {
     let s = -Math.abs(i.warmth - ft) * 1.5 - (i.warmth < ft ? 2 : 0);
     if (i.waterResistance >= needWaterFeet) s += 2;
     else s -= (needWaterFeet - i.waterResistance) * 2;
-    if (t > 22 && has(i, "sandal")) s += 1;
-    if (t < 10 && has(i, "sandal")) s -= 5;
+    if (hot && has(i, "sandal")) s += a.needsRainProtection ? 0 : 1.5;
+    if (hot && i.warmth >= 3) s -= 3;
+    if (t < 12 && has(i, "sandal")) s -= 5;
     return s;
-  });
+  }, pinned);
   if (shoe) {
-    picks.push({ slot: "Footwear", item: shoe, reason: shoe.waterResistance >= 2 ? "Waterproof, keeps feet dry" : `Warmth ${shoe.warmth}/5` });
+    picks.push({ slot: "Shoes", item: shoe, reason: shoe.waterResistance >= 2 && needWaterFeet ? "Keeps feet dry" : hot && has(shoe, "sandal") ? "Cool and airy" : `Warmth ${shoe.warmth}/5` });
     let feetWarmth = shoe.warmth;
+    const warmSocks = pickBest(socks, (i) => i.warmth);
     if (warmSocks && ft >= 1) {
-      picks.push({ slot: "Socks", item: warmSocks, reason: "Warm socks make a big difference in cold shoes" });
+      picks.push({ slot: "Socks", item: warmSocks, reason: "Warm feet in cold shoes" });
       feetWarmth += 1;
     }
     if (feetWarmth < ft) {
-      limitations.push({
-        severity: ft - feetWarmth >= 2 ? "warning" : "caution",
-        text: `${shoe.name} won't keep your feet very warm today (feels like ${fmt(a.coldestFeelsLike)}).`,
-        gapKey: "winter-boots",
-      });
-      improvisations.push("Wear two pairs of socks if your shoes fit, ideally wool or a thick pair on the outside.");
+      limitations.push({ severity: ft - feetWarmth >= 2 ? "warning" : "caution", text: `${shoe.name} are cold for ${fmt(a.coldestFeelsLike)}`, workaround: "Wear two pairs of socks, thick ones on the outside.", gapKey: "winter-boots" });
     }
     if (shoe.waterResistance < needWaterFeet) {
       limitations.push({
         severity: a.snowExpected && t < 0 ? "warning" : "caution",
-        text: a.snowExpected
-          ? `${shoe.name} will let in snow and slush. Wet feet get cold fast.`
-          : `${shoe.name} aren't water resistant, so puddles will soak through.`,
-        gapKey: a.snowExpected ? "winter-boots" : "rain-jacket",
+        text: a.snowExpected ? `${shoe.name} will let in snow and slush` : `${shoe.name} will get wet in puddles`,
+        workaround: "Pack a dry pair of socks to change into indoors.",
+        gapKey: a.snowExpected ? "winter-boots" : "rain-footwear",
       });
-      improvisations.push("Pack a dry pair of socks in your bag to change into once you're indoors.");
     }
   } else {
-    limitations.push({ severity: "caution", text: "No footwear marked available in your wardrobe." });
+    limitations.push({ severity: "caution", text: "No shoes available", workaround: "Add some to your closet or mark them available." });
   }
 
   // Head, hands, neck
@@ -294,70 +301,78 @@ function buildOutfit(
   const needNeck = t <= -8;
   const hoodAvailable = torso.layers.find(hasHood);
   const hats = wardrobe.filter((i) => i.category === "head");
-  const warmHat = pickBest(hats.filter((i) => i.warmth >= 1), (i) => i.warmth);
   if (needHead) {
-    if (warmHat) picks.push({ slot: "Head", item: warmHat, reason: "You lose a lot of heat through your head" });
-    else {
+    const warmHat = pickBest(hats.filter((i) => i.warmth >= 1), (i) => i.warmth, pinned);
+    if (warmHat) picks.push({ slot: "Hat", item: warmHat, reason: "Keeps your ears warm" });
+    else
       limitations.push({
         severity: t <= -15 ? "warning" : "caution",
-        text: hoodAvailable ? `No warm hat. Use the hood on your ${hoodAvailable.name} instead.` : "No warm hat, and nothing with a hood today. Your ears are at risk in the cold.",
+        text: "No warm hat",
+        workaround: hoodAvailable ? `Put up the hood on your ${hoodAvailable.name}.` : "Wear a hoodie as your layer so you have a hood.",
         gapKey: "toque",
       });
-      if (hoodAvailable) improvisations.push(`Put up the hood on your ${hoodAvailable.name} and pull it snug.`);
-      else improvisations.push("If you have a hoodie, wear it as your mid layer so you have a hood.");
-    }
   } else if (a.needsSunProtection) {
-    const cap = hats.find((i) => has(i, "cap", "sun hat"));
-    if (cap) picks.push({ slot: "Head", item: cap, reason: "Shade from strong UV" });
+    const sunHat = pickBest(hats.filter((i) => has(i, "cap", "sun hat", "bucket")), (i) => (has(i, "sun hat", "bucket") ? 1 : 0), pinned);
+    if (sunHat) picks.push({ slot: "Hat", item: sunHat, reason: `Shade from UV ${Math.round(a.maxUv)}` });
+    else limitations.push({ severity: "info", text: "No sun hat", workaround: "Sunscreen on your face and ears, and stick to shady routes.", gapKey: "sun-hat" });
   }
-  const gloves = pickBest(wardrobe.filter((i) => i.category === "hands"), (i) => i.warmth);
   if (needHands) {
+    const gloves = pickBest(wardrobe.filter((i) => i.category === "hands"), (i) => i.warmth, pinned);
     if (gloves) {
-      picks.push({ slot: "Hands", item: gloves, reason: gloves.warmth >= 3 ? "Insulated, good for long waits" : "Keeps hands covered" });
-      if (t <= -15 && gloves.warmth < 3) {
-        limitations.push({ severity: "caution", text: `${gloves.name} are thin for this cold. Fingers may go numb on long waits.`, gapKey: "mittens" });
-        improvisations.push("Keep your hands in your pockets with your gloves on, and make fists inside the gloves to warm your fingers.");
-      }
+      picks.push({ slot: "Gloves", item: gloves, reason: gloves.warmth >= 3 ? "Insulated for long waits" : "Keeps hands covered" });
+      if (t <= -15 && gloves.warmth < 3) limitations.push({ severity: "caution", text: `${gloves.name} are thin for this cold`, workaround: "Keep gloved hands in your pockets.", gapKey: "mittens" });
     } else {
-      limitations.push({ severity: t <= -15 ? "warning" : "caution", text: "No gloves or mittens. Hands get painfully cold quickly below 0°C.", gapKey: "mittens" });
-      improvisations.push("Pull your sleeves over your hands and keep them in your pockets. A pair of socks over your hands works in a pinch.");
+      limitations.push({ severity: t <= -15 ? "warning" : "caution", text: "No gloves", workaround: "Sleeves over your hands, hands in pockets. Socks work as mitts in a pinch.", gapKey: "mittens" });
     }
   }
   if (needNeck) {
-    const scarf = pickBest(wardrobe.filter((i) => i.category === "neck"), (i) => i.warmth + i.windResistance);
-    if (scarf) picks.push({ slot: "Neck", item: scarf, reason: "Seals the gap at your collar and can cover your face" });
-    else {
-      limitations.push({ severity: "info", text: "No scarf. Cold air gets in at your collar.", gapKey: "scarf" });
-      improvisations.push("Zip your jacket all the way up, or wear a turtleneck or hoodie so your neck is covered.");
-    }
+    const scarf = pickBest(wardrobe.filter((i) => i.category === "neck"), (i) => i.warmth + i.windResistance, pinned);
+    if (scarf) picks.push({ slot: "Scarf", item: scarf, reason: "Blocks cold air at your collar" });
+    else limitations.push({ severity: "info", text: "No scarf", workaround: "Zip your jacket all the way up or wear a turtleneck.", gapKey: "scarf" });
   }
-  if (a.needsRainProtection && umbrella && !outers.some((o) => o.waterResistance >= 1) && !a.needsWindProtection) {
-    picks.push({ slot: "Carry", item: umbrella, reason: `${Math.round(a.maxPrecipProbability)}% chance of rain` });
+
+  // Rain gear
+  const waterproofOuter = outers.some((o) => o.waterResistance >= 1);
+  if (a.needsRainProtection && !waterproofOuter) {
+    if (umbrella && a.maxGust < 50 && !a.thunder) picks.push({ slot: "Bring", item: umbrella, reason: `${Math.round(a.maxPrecipProbability)}% chance of rain` });
+    else
+      limitations.push({
+        severity: "caution",
+        text: umbrella ? "Too windy for an umbrella" : "Nothing waterproof",
+        workaround: hoodAvailable ? `Use the hood on your ${hoodAvailable.name} and avoid suede or canvas shoes.` : "Wear quick-drying layers and pack a spare top.",
+        gapKey: "rain-jacket",
+      });
   }
   if (a.needsSunProtection) {
     const glasses = wardrobe.find((i) => has(i, "sunglass"));
-    if (glasses) picks.push({ slot: "Carry", item: glasses, reason: `UV index up to ${Math.round(a.maxUv)}` });
+    if (glasses) picks.push({ slot: "Bring", item: glasses, reason: `UV index ${Math.round(a.maxUv)}` });
   }
 
-  // Torso shortfall and improvisation.
+  // Pinned item sanity checks.
+  if (pinned) {
+    if (TORSO.has(pinned.category) && warm && pinned.warmth >= 3) {
+      limitations.push({ severity: "info", text: `Your ${pinned.name} will be warm today`, workaround: "Wear it in the morning and carry it once it heats up." });
+    }
+    if (pinned.category === "footwear" && pinned.waterResistance < needWaterFeet) {
+      // already covered by the footwear limitation above
+    }
+  }
+
+  // Torso shortfall
   const deficit = torso.deficit;
   const warmestOuter = Math.max(0, ...wardrobe.filter((i) => i.category === "outer").map((i) => i.warmth));
   const hasWindproof = torso.layers.some((i) => i.windResistance === 2);
   if (deficit > 0) {
     limitations.unshift({
       severity: deficit >= 4 ? "danger" : deficit >= 2 ? "warning" : "caution",
-      text: `This is the warmest combination you have, but it's still about ${deficit} level${deficit > 1 ? "s" : ""} short of what feels-like ${fmt(a.coldestFeelsLike)} calls for${a.longestExposureMinutes >= 15 ? ` over ${a.longestExposureMinutes} minutes outside` : ""}.`,
+      text: deficit === 1 ? "A little lighter than ideal" : `Not warm enough for ${fmt(a.coldestFeelsLike)}`,
+      workaround: !hasWindproof && a.coldestFeelsLike < 5
+        ? "Wear any windbreaker or rain jacket on top of your sweaters. Blocking wind matters most."
+        : "Layer several thin tops instead of one thick one, and wait indoors when you can.",
       gapKey: warmestOuter < 4 ? "winter-coat" : "warm-mid",
     });
-    if (!hasWindproof && a.coldestFeelsLike < 5) {
-      improvisations.push("Wind is what makes cold unbearable. If you have any rain jacket or windbreaker, wear it as your top layer over your sweaters.");
-    }
-    improvisations.push("Layer several thin tops instead of one thick one. Trapped air between layers is what keeps you warm.");
-    if (a.segments.some((s) => s.label.includes("commute")) && routine.commuteMode === "transit") {
-      improvisations.push("Check the transit app and wait inside a shelter or nearby building until your bus is close.");
-    }
   } else if (target >= 6 && torso.layers.some(isShell)) {
-    improvisations.push("Your shell is doing the job of a winter coat's outer fabric here: it blocks the wind so your sweater layers can hold heat.");
+    why.push("Your shell blocks the wind so the layers underneath stay warm.");
   }
 
   let status: OutfitStatus = "good";
@@ -366,65 +381,79 @@ function buildOutfit(
   else if (deficit === 1 || limitations.some((l) => l.severity === "warning" || l.severity === "caution")) status = "workaround";
   // Explicit safety rule: in severe cold, improvisation is not a substitute for proper winter gear.
   const severeCold = a.coldestFeelsLike <= -27;
-  const missingCore = warmestOuter < 4 || !gloves || !warmHat;
+  const missingCore = warmestOuter < 4 || !wardrobe.some((i) => i.category === "hands") || !hats.some((i) => i.warmth >= 1);
   if (severeCold && missingCore) {
     status = "needs-gear";
     limitations.unshift({
       severity: "danger",
-      text: `Feels like ${fmt(a.coldestFeelsLike)} is frostbite weather. Improvised layers aren't enough here: keep outdoor time very short, cover all skin, and treat an insulated coat, hat and mitts as essential.`,
-      gapKey: warmestOuter < 4 ? "winter-coat" : !gloves ? "mittens" : "toque",
+      text: `Frostbite weather (${fmt(a.coldestFeelsLike)})`,
+      workaround: "Layering can't make up for missing winter gear here. Keep time outside very short and cover all skin.",
+      gapKey: warmestOuter < 4 ? "winter-coat" : "mittens",
     });
   }
+  // Extreme heat is a safety issue too, but the fix is behaviour, not clothing.
+  if (a.hottestFeelsLike >= 40) {
+    limitations.push({ severity: "warning", text: "Dangerous heat", workaround: "Stay in shade or indoors in the afternoon and drink water often." });
+  }
+
+  // Why it works
+  if (hot) why.push(prefs.sweatsEasily ? "Loose, light layers so you don't overheat. A spare top in your bag helps." : "Light, breathable pieces for the heat.");
+  else if (a.daySwing >= 6) why.push(`Layers for a ${Math.round(a.daySwing)}° swing between morning and afternoon.`);
+  if (a.needsWindProtection && hasWindproof) why.push("Windproof outer layer for today's gusts.");
+  if (a.needsRainProtection && waterproofOuter) why.push("Water-resistant on top for the rain.");
+  if (why.length === 0) why.push(`Matched to feels-like ${fmt(a.coldestFeelsLike)}${a.hottestFeelsLike - a.coldestFeelsLike >= 3 ? ` to ${fmt(a.hottestFeelsLike)}` : ""}.`);
 
   // Day plan: transitions between indoor and outdoor parts of the day.
   const dayPlan: string[] = [];
   const removable = torso.layers.filter((i) => i.category === "outer" || i.category === "mid").map((i) => i.name);
-  for (const s of a.segments) {
-    dayPlan.push(`${s.label} (${String(s.hour).padStart(2, "0")}:00, ~${s.minutes} min): feels like ${fmt(s.effectiveFeelsLike)}${s.weather.precipitationProbability >= 40 ? `, ${Math.round(s.weather.precipitationProbability)}% chance of ${s.weather.snowfall > 0 ? "snow" : "rain"}` : ""}.`);
-  }
-  if (routine.indoorEnvironment === "heated" && removable.length) {
-    dayPlan.push(`Indoors: take off your ${listJoin(removable)} so you don't overheat, then put ${removable.length > 1 ? "them" : "it"} back on before heading out.`);
-  } else if (routine.indoorEnvironment === "air-conditioned") {
-    const mid = torso.layers.find((i) => i.category === "mid");
-    dayPlan.push(mid ? `Indoors: keep your ${mid.name} handy, air conditioning can feel chilly.` : "Indoors: air conditioning can be chilly; a light sweater in your bag helps.");
+  if (routine?.indoorEnvironment === "heated" && removable.length && a.coldestFeelsLike < 12) {
+    dayPlan.push(`Take off your ${listJoin(removable)} indoors.`);
+  } else if (routine?.indoorEnvironment === "air-conditioned" || (!routine && hot)) {
+    const light = torso.layers.find((i) => i.category === "mid" || i.category === "outer");
+    dayPlan.push(light ? `Keep your ${light.name} for air-conditioned places.` : "A light layer helps in air-conditioned places.");
   }
   const carry = [...torso.layers]
     .filter((i) => i.category === "mid" || (i.category === "outer" && !(a.needsRainProtection && i.waterResistance > 0)))
     .sort((x, y) => y.warmth - x.warmth)[0];
-  if (a.warmestFeelsLike - a.coldestFeelsLike >= 6 && carry) {
-    dayPlan.push(`It warms up by about ${Math.round(a.warmestFeelsLike - a.coldestFeelsLike)}° between your coldest and warmest time outside, so you can take off your ${carry.name} and carry it later in the day.`);
+  if (a.warmestFeelsLike - a.coldestFeelsLike >= 6 && carry && !dayPlan.some((d) => d.includes(carry.name))) {
+    dayPlan.push(`Carry your ${carry.name} once it warms up.`);
   }
 
-  const statusText: Record<OutfitStatus, string> = {
-    good: "This outfit covers today's conditions.",
-    workaround: "This works with a few compromises.",
-    limited: "This is your best option, but it has real limitations today.",
-    "needs-gear": "Your current wardrobe can't safely cover these conditions.",
+  const HEADLINES: Record<OutfitStatus, string> = {
+    good: "You're set for today.",
+    workaround: "Works with a few tweaks.",
+    limited: "Your best option, but not quite enough.",
+    "needs-gear": "Not safe enough for this weather.",
   };
-  const pieces = picks.map((p) => p.item.name);
-  const summary = `${statusText[status]} Dressing for feels-like ${fmt(a.coldestFeelsLike)}${a.longestExposureMinutes ? ` with up to ${a.longestExposureMinutes} minutes outside at once` : ""}: ${pieces.join(", ")}. Torso warmth ${torso.effective} vs ${target} recommended${torso.effective !== torso.raw ? ` (reduced from ${torso.raw} for wind or rain)` : ""}.`;
 
-  return { title, picks, torsoWarmth: torso.effective, torsoTarget: target, status, limitations, improvisations: [...new Set(improvisations)], dayPlan, summary };
+  return { title, picks, torsoWarmth: torso.effective, torsoTarget: target, status, headline: HEADLINES[status], why, limitations, dayPlan };
 }
 
 /** Recommend today's outfit plus up to two alternatives from the user's own wardrobe. */
-export function recommendOutfits(wardrobe: ClothingItem[], a: DayAnalysis, prefs: Preferences, routine: Routine): OutfitResult | undefined {
-  const primary = buildOutfit(wardrobe, a, prefs, routine, new Set(), "Today's best outfit");
+export function recommendOutfits(
+  wardrobe: ClothingItem[],
+  a: DayAnalysis,
+  prefs: Preferences,
+  routine?: Routine,
+  pinnedId?: string,
+): OutfitResult | undefined {
+  const primary = buildOutfit(wardrobe, a, prefs, routine, new Set(), "Best match", pinnedId);
   if (!primary) return undefined;
   const alternatives: OutfitRecommendation[] = [];
   // Compare by garment type so swapping a white t-shirt for a black one is not an "alternative".
   const signature = (r: OutfitRecommendation) => r.picks.map((p) => `${p.item.category}:${p.item.subtype}`).sort().join("|");
   const seen = new Set([signature(primary)]);
-  const primaryOuter = primary.picks.filter((p) => p.item.category === "outer").map((p) => p.item);
-  const primaryMid = primary.picks.filter((p) => p.item.category === "mid").map((p) => p.item);
-  const tries: [Set<string>, string][] = [];
-  if (primaryOuter.length) tries.push([new Set(primaryOuter.map((i) => i.id)), `Without your ${primaryOuter.map((i) => i.name).join(" + ")}`]);
-  if (primaryMid.length) tries.push([new Set(primaryMid.map((i) => i.id)), `Swap the ${primaryMid.map((i) => i.name).join(" + ")}`]);
-  const primaryBase = primary.picks.filter((p) => p.item.category === "base").map((p) => p.item);
-  if (primaryBase.length) tries.push([new Set(primaryBase.map((i) => i.id)), "Different base layer"]);
-  for (const [ex, title] of tries) {
+  const ofCat = (cat: string) => primary.picks.filter((p) => p.item.category === cat && p.item.id !== pinnedId).map((p) => p.item);
+  const tries: [ClothingItem[], string][] = [
+    [ofCat("outer"), "Different jacket"],
+    [ofCat("mid"), "Different layer"],
+    [ofCat("bottom"), "Different bottoms"],
+    [ofCat("base"), "Different top"],
+  ];
+  for (const [items, title] of tries) {
     if (alternatives.length >= 2) break;
-    const alt = buildOutfit(wardrobe, a, prefs, routine, ex, title);
+    if (!items.length) continue;
+    const alt = buildOutfit(wardrobe, a, prefs, routine, new Set(items.map((i) => i.id)), title, pinnedId);
     if (!alt) continue;
     const key = signature(alt);
     if (seen.has(key)) continue;

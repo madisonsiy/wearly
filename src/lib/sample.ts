@@ -2,27 +2,28 @@
 // forecasts used for tests and for "preview a winter day" in demos.
 
 import { itemFromPreset, findPreset } from "./garments";
-import type { ClothingItem, Forecast, HourlyWeather, Profile } from "./types";
+import type { ClothingItem, Forecast, HourlyWeather, Profile, Routine } from "./types";
 
 export const DEFAULT_PROFILE: Profile = {
   name: "",
   city: "Toronto, Ontario, Canada",
   latitude: 43.6532,
   longitude: -79.3832,
-  homeClimate: undefined,
-  coldExperience: "none",
-  routine: {
-    leaveHour: 8,
-    returnHour: 17,
-    commuteMode: "transit",
-    commuteOutdoorMinutes: 15,
-    middayOutdoorMinutes: 10,
-    indoorEnvironment: "heated",
-    transitionsPerDay: 4,
-  },
-  preferences: { coldSensitivity: 1, dislikesBulk: false, style: "casual" },
+  preferences: { coldSensitivity: 0, sweatsEasily: false, dislikesBulk: false, sunSensitive: false },
+  wishlist: [],
+  plans: [],
   budgetCad: 150,
   onboarded: false,
+};
+
+/** A starting point when the user adds a plan in settings. */
+export const DEFAULT_ROUTINE: Routine = {
+  leaveHour: 8,
+  returnHour: 17,
+  commuteMode: "transit",
+  commuteOutdoorMinutes: 15,
+  middayOutdoorMinutes: 10,
+  indoorEnvironment: "heated",
 };
 
 /** A typical first-fall wardrobe of someone arriving from a warm climate. */
@@ -40,6 +41,8 @@ export function sampleWardrobe(): ClothingItem[] {
     mk("trousers", "Black trousers"),
     mk("sneakers", "Canvas sneakers"),
     mk("sandals", "Sandals"),
+    mk("shorts", "Khaki shorts"),
+    mk("cap", "Baseball cap"),
     mk("umbrella", "Umbrella"),
   ];
 }
@@ -71,7 +74,7 @@ export function syntheticForecast(opts: {
   const hourly: HourlyWeather[] = [];
   for (let h = 0; h < 24; h++) {
     const t = opts.temp(h);
-    const feels = t <= 10 && wind >= 5 ? t - Math.min(12, wind / 3) : t;
+    const feels = t <= 10 && wind >= 5 ? t - Math.min(12, wind / 3) : t >= 24 ? t + 2 + (t - 24) * 0.8 : t;
     hourly.push(hour(date, h, {
       temperature: t,
       feelsLike: Math.round(feels * 10) / 10,
@@ -104,3 +107,24 @@ export function syntheticForecast(opts: {
 /** A cold, snowy January weekday in Toronto, for "preview winter" in the demo. */
 export const winterPreview = () =>
   syntheticForecast({ temp: (h) => -12 + 5 * Math.sin(((h - 9) / 24) * 2 * Math.PI), wind: 25, precipProb: 60, snow: true, uv: 2 });
+
+export type PreviewKind = "winter" | "spring" | "summer" | "fall";
+
+/** A hot, humid July afternoon. */
+export const summerPreview = () =>
+  syntheticForecast({ date: "2027-07-15", temp: (h) => 23 + 7 * Math.sin(((h - 9) / 24) * 2 * Math.PI), wind: 8, uv: 8 });
+
+/** A cool, rainy, windy spring day. */
+export const rainyPreview = () =>
+  syntheticForecast({ date: "2027-04-15", temp: (h) => 8 + 3 * Math.sin(((h - 9) / 24) * 2 * Math.PI), wind: 22, precipProb: 80, precip: 1.2 });
+
+/** A crisp, breezy October day. */
+export const fallPreview = () =>
+  syntheticForecast({ date: "2027-10-14", temp: (h) => 9 + 5 * Math.sin(((h - 9) / 24) * 2 * Math.PI), wind: 18, precipProb: 20, uv: 3 });
+
+export const PREVIEWS: Record<PreviewKind, { label: string; make: () => Forecast }> = {
+  winter: { label: "Snowy January", make: winterPreview },
+  spring: { label: "Rainy April", make: rainyPreview },
+  summer: { label: "Hot July", make: summerPreview },
+  fall: { label: "Crisp October", make: fallPreview },
+};

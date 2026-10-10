@@ -21,7 +21,9 @@ const TIMEOUT_MS = Number(process.env.WEARLY_AI_TIMEOUT_MS ?? 60000);
 type Content = string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
 
 export async function chat(model: string, messages: { role: "system" | "user"; content: Content }[], json = false): Promise<string> {
-  const res = await fetch(`${AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
+  let res: Response;
+  try {
+    res = await fetch(`${AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${AI_API_KEY}` },
     body: JSON.stringify({
@@ -32,7 +34,16 @@ export async function chat(model: string, messages: { role: "system" | "user"; c
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`Model endpoint returned ${res.status}`);
+  } catch (e) {
+    const err = e as Error;
+    if (err.name === "TimeoutError") throw new Error("The model took too long to answer");
+    throw new Error(`Can't reach the model server at ${AI_BASE_URL}. Is Ollama running?`);
+  }
+  if (!res.ok) {
+    // Some servers don't support JSON mode; retry once without it.
+    if (json && res.status === 400) return chat(model, messages, false);
+    throw new Error(`Model server returned ${res.status}`);
+  }
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content;
   if (typeof text !== "string") throw new Error("Model returned no content");
@@ -55,6 +66,7 @@ export interface RecognizedGarment {
 
 const RECOGNIZE_PROMPT = `You are a clothing recognition assistant for a wardrobe app.
 Look at the photo and identify every distinct clothing item or accessory you can clearly see (max 5).
+The clothes may be laid flat, on a hanger, or worn by a person: in that case list what the person is wearing (ignore the person themselves).
 Return ONLY JSON in this shape:
 {"items":[{"name":"short friendly name, e.g. 'grey wool sweater'","category":"base|mid|outer|bottom|footwear|head|hands|neck|accessory","subtype":"e.g. t-shirt, hoodie, wool sweater, rain jacket, puffer jacket, winter parka, jeans, leggings, sneakers, winter boots, toque, mittens, scarf, wool socks, umbrella","material":"only if visibly identifiable, else omit","color":"main colour","warmth":0-5,"waterResistance":0-2,"windResistance":0-2,"layerable":true|false,"confidence":0-1,"notes":"anything uncertain"}]}
 Categories: base = tops worn against the skin; mid = sweaters/hoodies/fleece; outer = jackets and coats.

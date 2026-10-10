@@ -4,7 +4,7 @@
 import { DEFAULT_PROFILE } from "./sample";
 import type { ClothingItem, Profile } from "./types";
 
-const KEY = "wearly:v1";
+const KEY = "wearly:v2";
 
 export interface SavedState {
   profile: Profile;
@@ -17,7 +17,7 @@ export function loadState(): SavedState {
     if (raw) {
       const s = JSON.parse(raw) as Partial<SavedState>;
       return {
-        profile: { ...DEFAULT_PROFILE, ...s.profile, routine: { ...DEFAULT_PROFILE.routine, ...s.profile?.routine }, preferences: { ...DEFAULT_PROFILE.preferences, ...s.profile?.preferences } },
+        profile: { ...DEFAULT_PROFILE, ...s.profile, wishlist: s.profile?.wishlist ?? [], plans: s.profile?.plans ?? [], preferences: { ...DEFAULT_PROFILE.preferences, ...s.profile?.preferences } },
         wardrobe: Array.isArray(s.wardrobe) ? s.wardrobe : [],
       };
     }

@@ -414,6 +414,132 @@
       ],
       "url": "https://www.walmart.ca/en/search?q=uv400+sunglasses",
       "priceCheckedOn": null
+    },
+    {
+      "id": "p26",
+      "gapKey": "rain-footwear",
+      "name": "Waterproof sneakers",
+      "retailer": "Decathlon",
+      "priceCad": 45,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Waterproof membrane",
+        "Everyday look"
+      ],
+      "url": "https://www.decathlon.ca/en/search?Ntt=waterproof+shoes",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p27",
+      "gapKey": "rain-footwear",
+      "name": "Rubber rain boots",
+      "retailer": "Walmart",
+      "priceCad": 30,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.6,
+      "features": [
+        "Fully waterproof",
+        "Easy to clean"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=rain+boots",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p28",
+      "gapKey": "light-layer",
+      "name": "Lightweight cardigan",
+      "retailer": "Uniqlo",
+      "priceCad": 40,
+      "tier": "value",
+      "suitability": 3,
+      "versatility": 0.9,
+      "features": [
+        "Fits under a coat",
+        "Good for air conditioning"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=cardigan",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p29",
+      "gapKey": "light-layer",
+      "name": "Light zip jacket",
+      "retailer": "Walmart",
+      "priceCad": 25,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.8,
+      "features": [
+        "Packable",
+        "Spring and fall"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=light+jacket",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p30",
+      "gapKey": "summer-bottoms",
+      "name": "Cotton shorts",
+      "retailer": "Walmart",
+      "priceCad": 15,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.7,
+      "features": [
+        "Breathable cotton"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=shorts",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p31",
+      "gapKey": "summer-bottoms",
+      "name": "Linen-blend pants",
+      "retailer": "Uniqlo",
+      "priceCad": 40,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Cool in humidity",
+        "Office-friendly"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=linen+pants",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p32",
+      "gapKey": "sun-hat",
+      "name": "Baseball cap",
+      "retailer": "Walmart",
+      "priceCad": 12,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.8,
+      "features": [
+        "Shades face"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=baseball+cap",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p33",
+      "gapKey": "sun-hat",
+      "name": "Wide-brim sun hat",
+      "retailer": "Decathlon",
+      "priceCad": 20,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.7,
+      "features": [
+        "Shades face and neck",
+        "UPF fabric"
+      ],
+      "url": "https://www.decathlon.ca/en/search?Ntt=sun+hat",
+      "priceCheckedOn": null
     }
   ]
 }

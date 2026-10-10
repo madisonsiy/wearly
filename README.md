@@ -1,6 +1,6 @@
 # Wearly
 
-**An AI-powered wardrobe and weather assistant that helps newcomers dress for Canada's unpredictable climate using the clothes they already own, and build a winter wardrobe gradually within their budget.**
+**An AI-powered wardrobe and weather assistant that helps newcomers dress for Canada's unpredictable weather in every season, using the clothes they already own, and build a wardrobe gradually within their budget.**
 
 Built for the ElleHacks × Hacktoberfest Hack Day 2026 (Best Open-Source AI Project).
 
@@ -16,19 +16,20 @@ Newcomers to Canada (international students, new immigrants, refugees) facing th
 
 ## Features (MVP)
 
+Designed as a phone app (installable to the home screen), with five tabs: Today, Closet, Shop, Learn, Settings.
+
 | Feature | Where |
 | --- | --- |
-| Current, hourly and 7-day forecast: temperature, feels-like, wind chill, wind, precipitation, snow, humidity, UV | `src/lib/weather.ts`, Today tab |
-| Weather alerts (frostbite risk per Environment Canada, ice, snow, rain, wind, UV, big temperature swings) | `analyzeDay()` |
-| Wardrobe: add by photo (AI recognition) or by name, edit any detail, mark items unavailable | Wardrobe tab, `src/lib/garments.ts` |
-| Routine personalisation: commute mode and minutes outside, midday time outside, heated / AC / outdoor workplace, cold sensitivity, dislike of bulk | My routine tab |
-| Daily outfit + alternatives, scored over every sensible layering combination, with a "your day" plan for indoor/outdoor transitions | `src/lib/outfit.ts` |
-| Improvisation when essentials are missing, with honest status: good / workaround / limited / needs proper gear | `buildOutfit()` |
-| Wardrobe gap detection, prioritised by importance, exposure and this week's forecast; covered needs are never shopped for | `src/lib/gaps.ts` |
-| Budget (CAD) purchase plan: essentials first, best value per dollar, "buy later" list, option comparison, thrift tips | `src/lib/shop.ts`, `src/data/products.json` |
-| Newcomer onboarding and plain-language explainers (feels-like, wind chill, layering, insulation, waterproofing, frostbite, black ice, UV, seasons) | `src/lib/education.ts`, Learn tab |
-| Profile and wardrobe saved on your device | `src/lib/storage.ts` |
-| "Preview a January day" to see how your wardrobe would hold up in winter | Today tab |
+| 3-question onboarding: name, comfort (gets cold, runs warm, sweats easily, no bulky layers, sun-sensitive), location (GPS or city search) | `Onboarding.tsx` |
+| Today: live local clock (city's time zone, updates every minute), weather summary (temp, feels-like, rain, wind, UV, humidity), hourly strip, weather alerts for every season (heat/humidex, UV, storms, rain, wind, ice, snow, frostbite) | `src/lib/weather.ts`, `TodayView.tsx` |
+| Outfit from your own clothes, plus alternatives, scored over every sensible layering combination | `src/lib/outfit.ts` |
+| "Make it work": for each missing or unsuitable item, a workaround using what you own, and an honest status (good / small tweaks / limited / needs proper gear) | `buildOutfit()` |
+| Personalize: no plan needed (dresses you for the whole day by default); add a plan for one date (e.g. October 14) or a repeating one (every day, weekdays, Mon/Wed/Fri, any days you pick); build the outfit around an item you want to wear | `PlanEditor`, `activePlan()` |
+| Closet: add by photo (AI recognition, works on flat-lays or photos of someone wearing the clothes) or by name; your own photo on every item (tap to add), with a coloured illustration until then; door-opening animation and a 3D carousel of today's picks (drag or arrows); mark items in the wash | `WardrobeView.tsx`, `src/lib/garments.ts` |
+| Shop: all-season gap detection, "want something?" check against what you own, budget plan (CAD) that never overspends | `src/lib/gaps.ts`, `src/lib/shop.ts` |
+| Learn: short explainers (feels-like, humidex, wind chill, layering, waterproofing, storms, UV, seasons) | `src/lib/education.ts` |
+| Preview a snowy January, rainy April, hot July or crisp October day to see how your closet holds up | Today tab |
+| Seasonal look: animated splash and onboarding art (summer waves, spring cherry blossoms, fall maple leaves, winter snow), pastel palette per season, phone-style bottom nav | `SeasonScene.tsx`, `globals.css` |
 
 ## Open-weight AI: what it does
 
@@ -50,18 +51,37 @@ Any OpenAI-compatible endpoint works (Ollama, vLLM, llama.cpp server, LM Studio)
 
 ## Run it
 
-Requirements: Node 20+ and (for AI features) [Ollama](https://ollama.com).
+Requirements: Node 20+.
 
 ```bash
-# 1. AI model (optional but recommended)
-ollama pull qwen2.5vl:7b        # ~6 GB; runs on a recent laptop
-ollama serve                     # if not already running
-
-# 2. App
 npm install
-cp .env.example .env.local       # adjust if your model runs elsewhere
-npm run dev                      # http://localhost:3000
+npm run dev        # open http://localhost:3000 (use your browser's phone view, or open the Network URL on your phone)
 ```
+
+### Turn on the AI (photo recognition and explanations)
+
+Without a model the app still works: photos are saved for you to describe, and everything else is rule-based. To enable AI, pick one:
+
+**Option A: on your computer with Ollama (free, private, ~6 GB download)**
+
+```bash
+brew install ollama        # or download from https://ollama.com
+ollama serve               # leave running in its own terminal
+ollama pull qwen2.5vl:7b
+```
+
+Restart `npm run dev`. Settings → AI model should say "Connected".
+
+**Option B: hosted, no download.** Create a free token at https://huggingface.co/settings/tokens, then create `.env.local`:
+
+```bash
+WEARLY_AI_BASE_URL=https://router.huggingface.co/v1
+WEARLY_AI_API_KEY=hf_your_token_here
+WEARLY_VISION_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+WEARLY_TEXT_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+```
+
+If photo upload says "Can't reach the model server", the app couldn't connect to either option.
 
 Tests and checks:
 
