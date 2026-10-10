@@ -35,7 +35,9 @@ Designed as a phone app (installable to the home screen), with five tabs: Today,
 
 Wearly uses **[Qwen2.5-VL 7B Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct)**, an open-weight small vision-language model (≈7B parameters, [Apache-2.0 license](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/blob/main/LICENSE)), served locally with [Ollama](https://ollama.com/library/qwen2.5vl) (`qwen2.5vl:7b`).
 
-The model does the parts that need perception and language:
+It also ships a second, smaller open-weight model that runs in the browser with no server: **[CLIP ViT-B/32](https://huggingface.co/openai/clip-vit-base-patch32)** (MIT license), loaded through [Transformers.js](https://github.com/huggingface/transformers.js) (Apache-2.0) as `Xenova/clip-vit-base-patch32`. It classifies a photo against Wearly's garment library zero-shot (`src/lib/localVision.ts`), so photo recognition works even without Ollama or a token.
+
+The models do the parts that need perception and language:
 
 - **Clothing recognition**: identifies garments in a photo with type, colour, visible material and estimated warmth / water / wind protection (`src/lib/ai.ts → recognizeGarments`).
 - **Explanations**: turns the engine's facts into a short, friendly explanation of why an outfit works, and why a wardrobe gap matters (`explain`).
@@ -47,7 +49,7 @@ The model is **not** trusted with anything safety- or money-related. Explicit ru
 - Outfit status, limitations and the "needs proper winter gear" rule are computed by the engine and passed to the model as fixed facts. The prompt forbids inventing items or softening warnings, and the UI always shows the rule-based status next to the model's text.
 - Budget plans never exceed the budget (unit-tested), and products come from a data file with explicit prices and links.
 
-Any OpenAI-compatible endpoint works (Ollama, vLLM, llama.cpp server, LM Studio), so you can swap in another open-weight model such as Llama 3.2 Vision 11B or Gemma 3. If no model is running, the app still works fully: photo items can be described by hand and explanations are rule-based.
+Any OpenAI-compatible endpoint works (Ollama, vLLM, llama.cpp server, LM Studio), so you can swap in another open-weight model such as Llama 3.2 Vision 11B or Gemma 3. If no model server is running, the app still works fully: photos are recognised by the in-browser CLIP model and explanations are rule-based.
 
 ## Run it
 
@@ -60,7 +62,9 @@ npm run dev        # open http://localhost:3000 (use your browser's phone view, 
 
 ### Turn on the AI (photo recognition and explanations)
 
-Without a model the app still works: photos are saved for you to describe, and everything else is rule-based. To enable AI, pick one:
+**Built in, no setup:** photos are recognised right in the browser with OpenAI's CLIP ViT-B/32 (open weights, MIT licence, run via Transformers.js, Apache-2.0, model `Xenova/clip-vit-base-patch32`). It picks the garment type out of every type Wearly knows (so a tank top and a hoodie get different warmth), and the colour comes from the photo's pixels. The model (~90 MB) downloads once and the browser caches it. It's also the fallback when the AI server below fails.
+
+For richer results (several items in one photo, materials, written explanations), also connect Qwen2.5-VL. Pick one:
 
 **Option A: on your computer with Ollama (free, private, ~6 GB download)**
 
@@ -82,6 +86,8 @@ WEARLY_TEXT_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
 ```
 
 If photo upload says "Can't reach the model server", the app couldn't connect to either option.
+
+**Photos slow?** A 7B vision model running on a laptop (Option A) can take 30 seconds to a few minutes per photo and slows the whole computer while it works, especially without a strong GPU. The first photo is slowest because the model has to load into memory. Wearly sends the model a small 448px copy and shows a timer with a "Fill it in myself" button, which stops the model. For a quick demo, use Option B so the model runs on Hugging Face instead of your laptop.
 
 Tests and checks:
 

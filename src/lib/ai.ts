@@ -20,7 +20,7 @@ const TIMEOUT_MS = Number(process.env.WEARLY_AI_TIMEOUT_MS ?? 60000);
 
 type Content = string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
 
-export async function chat(model: string, messages: { role: "system" | "user"; content: Content }[], json = false): Promise<string> {
+export async function chat(model: string, messages: { role: "system" | "user"; content: Content }[], json = false, signal?: AbortSignal): Promise<string> {
   let res: Response;
   try {
     res = await fetch(`${AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
@@ -30,19 +30,27 @@ export async function chat(model: string, messages: { role: "system" | "user"; c
       model,
       messages,
       temperature: json ? 0.1 : 0.4,
+      // Short answers keep a local model quick; garment JSON and explanations are both small.
+      max_tokens: json ? 600 : 350,
       ...(json ? { response_format: { type: "json_object" } } : {}),
     }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    // Stop the model too when the user gives up waiting, so it doesn't keep the laptop busy.
+    signal: signal ? AbortSignal.any([AbortSignal.timeout(TIMEOUT_MS), signal]) : AbortSignal.timeout(TIMEOUT_MS),
   });
   } catch (e) {
     const err = e as Error;
     if (err.name === "TimeoutError") throw new Error("The model took too long to answer");
+    if (err.name === "AbortError") throw new Error("Cancelled");
     throw new Error(`Can't reach the model server at ${AI_BASE_URL}. Is Ollama running?`);
   }
   if (!res.ok) {
     // Some servers don't support JSON mode; retry once without it.
-    if (json && res.status === 400) return chat(model, messages, false);
-    throw new Error(`Model server returned ${res.status}`);
+    if (json && res.status === 400) return chat(model, messages, false, signal);
+    const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 160);
+    if (res.status === 401 || res.status === 403) throw new Error("The model server rejected the key. For Hugging Face, check the token in .env.local and that it has the \"Make calls to Inference Providers\" permission");
+    if (res.status === 404) throw new Error(`The model "${model}" isn't available on this server${detail ? ` (${detail})` : ""}`);
+    if (res.status === 402 || res.status === 429) throw new Error("The free model quota is used up for now. Try again later or use Ollama");
+    throw new Error(`Model server returned ${res.status}${detail ? `: ${detail}` : ""}`);
   }
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content;
@@ -74,9 +82,29 @@ Warmth: 0 none, 1 light (t-shirt), 2 (hoodie), 3 (fleece, wool sweater), 4 (puff
 Do not guess materials you cannot see. If nothing wearable is visible, return {"items":[]}.`;
 
 /** Validate and normalise model output with explicit rules. Unknown values fall back to preset defaults. */
+const CATEGORY_WORDS: [RegExp, Category][] = [
+  [/coat|jacket|parka|puffer|windbreaker|raincoat|blazer|vest|anorak/, "outer"],
+  [/hoodie|sweater|sweatshirt|cardigan|fleece|pullover|jumper/, "mid"],
+  [/shirt|tee|top|blouse|tank|polo|camisole|bodysuit/, "base"],
+  [/pant|jean|trouser|short|skirt|legging|jogger|chino|dress/, "bottom"],
+  [/shoe|boot|sneaker|sandal|heel|loafer|slipper|trainer/, "footwear"],
+  [/hat|cap|toque|beanie|tuque|hood/, "head"],
+  [/glove|mitt/, "hands"],
+  [/scarf|neck/, "neck"],
+];
+const DEFAULT_WARMTH: Record<Category, number> = { base: 1, mid: 2, outer: 3, bottom: 1, footwear: 1, head: 1, hands: 2, neck: 2, accessory: 0 };
+
+/** Models don't always follow the schema exactly: accept {items}, {clothing}, a bare array or a single item. */
+function itemsFrom(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== "object") return [];
+  const obj = raw as Record<string, unknown>;
+  for (const k of ["items", "clothing", "garments", "clothes", "results"]) if (Array.isArray(obj[k])) return obj[k] as unknown[];
+  return "name" in obj || "subtype" in obj ? [obj] : [];
+}
+
 export function normalizeRecognition(raw: unknown): RecognizedGarment[] {
-  const obj = raw as { items?: unknown[] } | null;
-  const items = Array.isArray(obj?.items) ? obj!.items : [];
+  const items = itemsFrom(raw);
   const out: RecognizedGarment[] = [];
   for (const it of items.slice(0, 5)) {
     if (!it || typeof it !== "object") continue;
@@ -85,11 +113,13 @@ export function normalizeRecognition(raw: unknown): RecognizedGarment[] {
     const name = String(r.name ?? subtype).trim().slice(0, 60);
     if (!subtype && !name) continue;
     const preset = findPreset(subtype) ?? findPreset(name);
-    const category: Category | undefined = isCategory(r.category) ? r.category : preset?.category;
+    const guessed = CATEGORY_WORDS.find(([re]) => re.test(`${subtype} ${name}`.toLowerCase()))?.[1];
+    const rc = typeof r.category === "string" ? r.category.toLowerCase().trim() : r.category;
+    const category: Category | undefined = isCategory(rc) ? rc : preset?.category ?? guessed;
     if (!category) continue;
     // When we recognise the garment type, our preset values win over the model's guess,
     // except that the model may lower warmth/water by one step (e.g. a thin version).
-    const modelWarmth = clampInt(r.warmth, 0, 5, preset?.warmth ?? 1);
+    const modelWarmth = clampInt(r.warmth, 0, 5, preset?.warmth ?? DEFAULT_WARMTH[category]);
     const warmth = preset ? Math.max(preset.warmth - 1, Math.min(preset.warmth, modelWarmth)) : modelWarmth;
     const water = preset ? preset.waterResistance : (clampInt(r.waterResistance, 0, 2, 0) as 0 | 1 | 2);
     const wind = preset ? preset.windResistance : (clampInt(r.windResistance, 0, 2, 0) as 0 | 1 | 2);
@@ -121,7 +151,7 @@ export function parseJsonLoose(text: string): unknown {
   }
 }
 
-export async function recognizeGarments(imageDataUrl: string): Promise<RecognizedGarment[]> {
+export async function recognizeGarments(imageDataUrl: string, signal?: AbortSignal): Promise<RecognizedGarment[]> {
   const text = await chat(
     VISION_MODEL,
     [
@@ -129,6 +159,7 @@ export async function recognizeGarments(imageDataUrl: string): Promise<Recognize
       { role: "user", content: [{ type: "text", text: "Identify the clothing in this photo." }, { type: "image_url", image_url: { url: imageDataUrl } }] },
     ],
     true,
+    signal,
   );
   return normalizeRecognition(parseJsonLoose(text));
 }

@@ -255,3 +255,23 @@ describe("flexible plans", () => {
     expect(activePlan(p, "2026-12-07")).toBeUndefined(); // after end
   });
 });
+
+describe("small closets", () => {
+  const w = [item("tank top"), item("sweatpants"), item("hoodie"), item("sneakers")];
+  const names = (f: ReturnType<typeof summerPreview>) => recommendOutfits(w, analyzeDay(f, prefs, undefined, f.daily[0].date), prefs)!.primary.picks.map((p) => p.item.subtype);
+  it("never adds a hoodie on a hot day", () => {
+    expect(names(summerPreview())).not.toContain("hoodie");
+  });
+  it("always adds the hoodie when it's cold, even if wind cuts its warmth", () => {
+    expect(names(rainyPreview())).toContain("hoodie");
+    expect(names(winterPreview())).toContain("hoodie");
+  });
+});
+
+describe("messy model output", () => {
+  it("accepts other shapes and guesses missing categories", () => {
+    expect(normalizeRecognition([{ name: "black hoodie" }])[0]).toMatchObject({ category: "mid", subtype: "hoodie" });
+    expect(normalizeRecognition({ clothing: [{ name: "Corduroy blazer", category: "Outerwear" }] })[0]).toMatchObject({ category: "outer" });
+    expect(normalizeRecognition({ name: "white tee", category: "BASE" })[0].category).toBe("base");
+  });
+});

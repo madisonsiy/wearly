@@ -5,7 +5,7 @@ import type { ClothingItem } from "@/lib/types";
 // Shows the user's real photo of an item. Without one, draws a clean illustration
 // of that garment type in the item's colour, so the closet never shows bare icons.
 
-const COLORS: Record<string, string> = {
+export const COLORS: Record<string, string> = {
   black: "#3a3d44", white: "#f4f4f2", grey: "#a9adb5", gray: "#a9adb5", charcoal: "#5b5f66", navy: "#33456b", blue: "#6f93c9",
   "light blue": "#a9c6e8", denim: "#5f7fa8", red: "#d0605e", burgundy: "#8c3b4a", pink: "#eeb3c3", purple: "#9b86c2",
   lavender: "#c7b8e6", green: "#7aa37a", olive: "#8a8f5a", khaki: "#c9b58f", beige: "#e3d3b8", cream: "#f3ead6",

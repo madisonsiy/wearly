@@ -303,10 +303,10 @@ export default function SettingsView({ profile, today, onChange, onReset, ai }: 
       </div>
       <div className="card">
         <h3>AI model</h3>
-        <p className="small">{ai?.online ? `Connected: ${ai.visionModel}` : "Not connected. Photo recognition needs the model server running."}</p>
+        <p className="small">{ai?.online ? `Connected: ${ai.visionModel}` : "No AI server connected. Photos are still recognised on this device with the built-in model (CLIP)."}</p>
         {!ai?.online && (
           <p className="small muted">
-            On your computer: install Ollama, run <code>ollama pull qwen2.5vl:7b</code>, then restart the app. See the README for a hosted option.
+            For richer results (several items per photo, materials, written explanations), connect Qwen2.5-VL with Ollama or a Hugging Face token. See the README.
           </p>
         )}
       </div>

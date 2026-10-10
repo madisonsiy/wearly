@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   }
   if (image.length * 0.75 > MAX_BYTES) return NextResponse.json({ error: "Image is too large (max 6 MB)." }, { status: 413 });
   try {
-    const items = await recognizeGarments(image);
+    const items = await recognizeGarments(image, req.signal);
     return NextResponse.json({ items, model: VISION_MODEL });
   } catch (e) {
     return NextResponse.json(

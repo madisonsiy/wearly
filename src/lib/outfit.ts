@@ -47,7 +47,7 @@ export interface OutfitResult {
 /** Torso insulation target (sum of layer warmth) for a personal dressing temperature. */
 export function torsoTarget(dressingTemp: number): number {
   const steps: [number, number][] = [
-    [22, 1], [17, 2], [12, 3], [7, 4], [2, 5], [-3, 6], [-8, 7], [-13, 8], [-20, 9], [-28, 10],
+    [22, 0], [17, 2], [12, 3], [7, 4], [2, 5], [-3, 6], [-8, 7], [-13, 8], [-20, 9], [-28, 10],
   ];
   for (const [t, w] of steps) if (dressingTemp >= t) return w;
   return 11;
@@ -116,7 +116,8 @@ function evaluateTorso(layers: ClothingItem[], target: number, c: Ctx): TorsoCom
   }
   // Rain soaking through non-water-resistant layers removes insulation.
   if (a.needsRainProtection && outerWater === 0 && !c.umbrella && target >= 3) penalty += 1;
-  const effective = Math.max(0, raw - penalty);
+  // Wind and rain cut insulation but never cancel it out, so adding a layer always helps.
+  const effective = raw - Math.min(penalty, raw / 2);
   const deficit = Math.max(0, target - effective);
   const surplus = Math.max(0, effective - target);
   const bulk = prefs.dislikesBulk ? 2 : 1;
@@ -196,7 +197,8 @@ function buildOutfit(
   const hot = a.heatTemp >= 27;
   const warm = a.heatTemp >= 22;
   // On a hot day with a mild morning, a single light top is enough; extra layers just get carried.
-  const target = hot && t >= 17 ? 1 : torsoTarget(t);
+  // (Target 0: no layer is needed for warmth, so nothing gets added on top of a tank top.)
+  const target = hot && t >= 17 ? 0 : torsoTarget(t);
   const picks: OutfitPick[] = [];
   const limitations: Limitation[] = [];
   const why: string[] = [];
@@ -415,7 +417,9 @@ function buildOutfit(
   const carry = [...torso.layers]
     .filter((i) => i.category === "mid" || (i.category === "outer" && !(a.needsRainProtection && i.waterResistance > 0)))
     .sort((x, y) => y.warmth - x.warmth)[0];
-  if (a.warmestFeelsLike - a.coldestFeelsLike >= 6 && carry && !dayPlan.some((d) => d.includes(carry.name))) {
+  // Only suggest taking a layer off if what's left is still warm enough at the warmest point.
+  const warmestTarget = torsoTarget(a.warmestFeelsLike + (t - a.coldestFeelsLike));
+  if (a.warmestFeelsLike - a.coldestFeelsLike >= 6 && carry && torso.effective - carry.warmth >= warmestTarget && !dayPlan.some((d) => d.includes(carry.name))) {
     dayPlan.push(`Carry your ${carry.name} once it warms up.`);
   }
 

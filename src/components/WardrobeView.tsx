@@ -7,6 +7,7 @@ import { activePlan, analyzeDay } from "@/lib/weather";
 import { recommendOutfits } from "@/lib/outfit";
 import type { RecognizedGarment } from "@/lib/ai";
 import GarmentArt, { colorFromText } from "./GarmentArt";
+import { recognizeLocally } from "@/lib/localVision";
 
 const CATS = Object.keys(CATEGORY_LABELS) as Category[];
 const WARMTH = ["None", "Very light", "Light", "Medium", "Warm", "Very warm"];
@@ -215,8 +216,19 @@ export default function WardrobeView({
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Category | "all">("all");
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const lastFile = useRef<File | null>(null);
+  const pendingRef = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState(false);
+  const [localStatus, setLocalStatus] = useState<string | null>(null);
+  const cancelLocal = useRef<(() => void) | null>(null);
   const itemPhotoRef = useRef<HTMLInputElement>(null);
   const photoTarget = useRef<string | null>(null);
+
+  // Bring what the AI found into view so it's easy to check.
+  useEffect(() => {
+    if (pending.length) pendingRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [pending.length]);
 
   // The doors swing open shortly after the closet appears.
   useEffect(() => {
@@ -267,45 +279,126 @@ export default function WardrobeView({
     setQuick("");
   };
 
-  const onPhoto = async (file: File) => {
-    setBusy(true);
-    setPhotoMsg(null);
+  const blankFromPhoto = (photo: string): ClothingItem => ({ id: newId(), name: "New item", subtype: "", category: "mid", warmth: 2, waterResistance: 0, windResistance: 0, layerable: true, available: true, photo, source: "manual" });
+
+  const stopWaiting = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    cancelLocal.current?.();
+  };
+
+  /** Recognise the garment on this device with the built-in model. Returns false if that fails too. */
+  const runLocal = async (aiImage: string, photo: string): Promise<boolean> => {
+    setLocalStatus("Scanning…");
     try {
-      const image = await resizeImage(file);
-      const photo = await squarePhoto(image);
-      const res = await fetch("/api/recognize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image }) });
-      const json = await res.json();
-      const found: RecognizedGarment[] = json.items ?? [];
-      if (!res.ok || found.length === 0) {
-        setPhotoMsg(json.error ?? "We couldn't spot any clothing in that photo. Try one item on a plain background, or add it by name.");
-        // Still keep the photo: create a blank item the user can describe.
-        const item: ClothingItem = { id: newId(), name: "New item", subtype: "", category: "mid", warmth: 2, waterResistance: 0, windResistance: 0, layerable: true, available: true, photo, source: "manual" };
+      const cancelled = new Promise<null>((resolve) => (cancelLocal.current = () => resolve(null)));
+      const r = await Promise.race([
+        recognizeLocally(aiImage, photo, (pct) =>
+          setLocalStatus(pct === null ? "Scanning…" : `Getting ready… ${pct}%`),
+        ),
+        cancelled,
+      ]);
+      if (!r) {
+        const item = blankFromPhoto(photo);
         setPending([item]);
         setEditing(item.id);
-      } else {
-        setPending(
-          found.map((g) => ({
-            id: newId(),
-            name: g.name,
-            subtype: g.subtype,
-            category: g.category,
-            material: g.material,
-            color: g.color ?? colorFromText(g.name),
-            warmth: g.warmth,
-            waterResistance: g.waterResistance,
-            windResistance: g.windResistance,
-            layerable: g.layerable,
-            available: true,
-            photo,
-            source: "ai",
-          })),
-        );
-        setPhotoMsg(`Found ${found.length} item${found.length > 1 ? "s" : ""} using ${json.model}. Check the details and fix anything that's wrong.`);
+        setPhotoMsg("Add the details below.");
+        return true;
       }
+      setPending([r.item]);
+      setPhotoMsg(null);
+      return true;
     } catch {
-      setPhotoMsg("Couldn't process that photo. You can add the item by name instead.");
+      return false;
+    } finally {
+      cancelLocal.current = null;
+      setLocalStatus(null);
     }
-    setBusy(false);
+  };
+
+  const onPhoto = async (file: File) => {
+    lastFile.current = file;
+    setFailed(false);
+    setPhotoMsg(null);
+    let photo: string;
+    let aiImage: string;
+    try {
+      // Small copy for the model: vision models get much slower with bigger images.
+      const big = await resizeImage(file, 640);
+      photo = await squarePhoto(big);
+      aiImage = await resizeImage(file, 448);
+    } catch {
+      setPhotoMsg("Couldn't open that photo. Try a JPG or PNG.");
+      return;
+    }
+
+    const giveUp = (msg: string) => {
+      const item = blankFromPhoto(photo);
+      setPending([item]);
+      setEditing(item.id);
+      setPhotoMsg(msg);
+      setFailed(true);
+    };
+
+    setBusy(true);
+    try {
+      if (!aiOnline) {
+        // No AI server: recognise the photo right here in the browser.
+        if (!(await runLocal(aiImage, photo))) giveUp("Couldn't recognise it. Add the details below.");
+        return;
+      }
+
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      const timer = setTimeout(() => ctrl.abort(), 90000);
+      let serverError = "";
+      try {
+        const res = await fetch("/api/recognize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: aiImage }), signal: ctrl.signal });
+        const json = await res.json();
+        const found: RecognizedGarment[] = json.items ?? [];
+        if (res.ok && found.length) {
+          setPending(
+            found.map((g) => ({
+              id: newId(),
+              name: g.name,
+              subtype: g.subtype,
+              category: g.category,
+              material: g.material,
+              color: g.color ?? colorFromText(g.name),
+              warmth: g.warmth,
+              waterResistance: g.waterResistance,
+              windResistance: g.windResistance,
+              layerable: g.layerable,
+              available: true,
+              photo,
+              source: "ai",
+            })),
+          );
+          setPhotoMsg(null);
+          return;
+        }
+        serverError = json.error ?? "The AI didn't spot any clothing.";
+      } catch {
+        if (ctrl.signal.aborted && !abortRef.current) {
+          // The user tapped "Fill it in myself".
+          const item = blankFromPhoto(photo);
+          setPending([item]);
+          setEditing(item.id);
+          setPhotoMsg("Add the details below.");
+          return;
+        }
+        serverError = "Couldn't reach the AI server.";
+      } finally {
+        clearTimeout(timer);
+        abortRef.current = null;
+      }
+      // Server AI failed: fall back to the built-in model.
+      // Server AI failed: fall back to the built-in model quietly (details go to the console for debugging).
+      console.warn("Wearly AI server:", serverError);
+      if (!(await runLocal(aiImage, photo))) giveUp("Couldn't recognise it. Add the details below.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onItemPhoto = async (file: File) => {
@@ -339,30 +432,10 @@ export default function WardrobeView({
         </div>
       </div>
 
-      <div className="grid two">
-        <div className="card">
-          <h3>Add from a photo</h3>
-          <p className="small muted">Snap a piece of clothing, or a photo of yourself wearing it. AI fills in the details and you can fix anything.</p>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => (e.target.files?.[0] && onPhoto(e.target.files[0]), (e.target.value = ""))} />
-          <button className="primary" onClick={() => fileRef.current?.click()} disabled={busy}>
-            {busy ? "Looking at your photo…" : "📷 Take or upload a photo"}
-          </button>
-          {!aiOnline && <p className="small muted" style={{ marginTop: 8 }}>AI isn&apos;t connected yet (see Settings), so photos are saved for you to describe by hand.</p>}
-          {photoMsg && <p className="small" style={{ marginTop: 8 }}>{photoMsg}</p>}
-        </div>
-        <div className="card">
-          <h3>Add by name</h3>
-          <p className="small muted">Like &quot;grey hoodie&quot;, &quot;rain jacket&quot; or &quot;sandals&quot;.</p>
-          <div className="row">
-            <input list="garment-types" value={quick} onChange={(e) => setQuick(e.target.value)} onKeyDown={(e) => e.key === "Enter" && quick.trim() && quickAdd()} placeholder="e.g. grey hoodie" style={{ flex: 1, minWidth: 160 }} />
-            <button className="primary" onClick={quickAdd} disabled={!quick.trim()}>Add</button>
-          </div>
-        </div>
-      </div>
-
       {pending.length > 0 && (
-        <div className="card">
-          <h2>Confirm new items</h2>
+        <div className="card confirm" ref={pendingRef}>
+          <h2>Look right?</h2>
+          {photoMsg && <p className="small" style={{ marginTop: 0 }}>{photoMsg}</p>}
           {pending.map((p) =>
             editing === p.id ? (
               <ItemEditor key={p.id} item={p} onSave={(i) => (setPending(pending.map((x) => (x.id === i.id ? i : x))), setEditing(null))} onCancel={() => setEditing(null)} />
@@ -371,7 +444,7 @@ export default function WardrobeView({
                 <GarmentArt item={p} size={56} />
                 <div style={{ flex: 1 }}>
                   <div>{p.name} <span className="pill info">{CATEGORY_LABELS[p.category]}</span></div>
-                  <div className="small muted">Warmth {WARMTH[p.warmth].toLowerCase()} · {["not water resistant", "water resistant", "waterproof"][p.waterResistance]}{p.material ? ` · ${p.material}` : ""}</div>
+                  <div className="small muted">Warmth {p.warmth}/5{p.waterResistance ? ` · ${p.waterResistance === 2 ? "waterproof" : "water resistant"}` : ""}</div>
                 </div>
                 <button onClick={() => setEditing(p.id)}>Edit</button>
                 <button onClick={() => setPending(pending.filter((x) => x.id !== p.id))}>Skip</button>
@@ -383,6 +456,36 @@ export default function WardrobeView({
           </button>
         </div>
       )}
+
+      <div className="grid two">
+        <div className="card">
+          <h3>Add from a photo</h3>
+          <p className="small muted">Snap one piece of clothing. We fill in the details.</p>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => (e.target.files?.[0] && onPhoto(e.target.files[0]), (e.target.value = ""))} />
+          <button className="primary" onClick={() => fileRef.current?.click()} disabled={busy}>
+            {busy ? (localStatus ?? "Scanning…") : "📷 Take or upload a photo"}
+          </button>
+          {busy && (
+            <p className="small muted" style={{ marginTop: 8 }}>
+              <button className="link small" onClick={stopWaiting}>Skip</button>
+            </p>
+          )}
+          {photoMsg && !pending.length && (
+            <p className="small" style={{ marginTop: 8 }}>
+              {photoMsg}{" "}
+              {failed && lastFile.current && aiOnline && !busy && <button className="link small" onClick={() => onPhoto(lastFile.current!)}>Try again</button>}
+            </p>
+          )}
+        </div>
+        <div className="card">
+          <h3>Add by name</h3>
+          <p className="small muted">Like &quot;grey hoodie&quot;, &quot;rain jacket&quot; or &quot;sandals&quot;.</p>
+          <div className="row">
+            <input list="garment-types" value={quick} onChange={(e) => setQuick(e.target.value)} onKeyDown={(e) => e.key === "Enter" && quick.trim() && quickAdd()} placeholder="e.g. grey hoodie" style={{ flex: 1, minWidth: 160 }} />
+            <button className="primary" onClick={quickAdd} disabled={!quick.trim()}>Add</button>
+          </div>
+        </div>
+      </div>
 
       <div className="card">
         <div className="spread">
