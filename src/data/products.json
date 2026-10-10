@@ -1,0 +1,419 @@
+{
+  "note": "Reference prices in CAD are typical-price estimates, not live quotes. Links open the retailer's search for that item. Set priceCheckedOn when a person verifies a price.",
+  "products": [
+    {
+      "id": "p1",
+      "gapKey": "winter-coat",
+      "name": "Basic insulated winter parka",
+      "retailer": "Walmart",
+      "priceCad": 80,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.7,
+      "features": [
+        "Synthetic insulation",
+        "Hood",
+        "Rated to about -20\u00b0C"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=insulated+winter+parka",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p2",
+      "gapKey": "winter-coat",
+      "name": "Hooded winter parka, mid-weight",
+      "retailer": "Mark's",
+      "priceCad": 180,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.8,
+      "features": [
+        "Rated to about -30\u00b0C",
+        "Windproof shell",
+        "Water resistant"
+      ],
+      "url": "https://www.marks.com/en/search-results.html?q=winter+parka",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p3",
+      "gapKey": "winter-coat",
+      "name": "Down parka, long cut",
+      "retailer": "Uniqlo",
+      "priceCad": 200,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.8,
+      "features": [
+        "Down fill",
+        "Water repellent",
+        "Packable hood"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=seamless+down+parka",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p4",
+      "gapKey": "winter-coat",
+      "name": "Expedition-style parka",
+      "retailer": "Canadian Tire",
+      "priceCad": 320,
+      "tier": "premium",
+      "suitability": 5,
+      "versatility": 0.6,
+      "features": [
+        "Rated to about -40\u00b0C",
+        "Long cut covers hips",
+        "Snow skirt"
+      ],
+      "url": "https://www.canadiantire.ca/en/search-results.html?q=winter+parka+-40",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p5",
+      "gapKey": "winter-boots",
+      "name": "Insulated waterproof winter boots",
+      "retailer": "Walmart",
+      "priceCad": 50,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.7,
+      "features": [
+        "Waterproof shell",
+        "Rated to about -25\u00b0C"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=men+women+winter+boots+waterproof",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p6",
+      "gapKey": "winter-boots",
+      "name": "Waterproof winter boots with grip sole",
+      "retailer": "Mark's",
+      "priceCad": 120,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.8,
+      "features": [
+        "Rated to about -40\u00b0C",
+        "Slip-resistant sole",
+        "Waterproof"
+      ],
+      "url": "https://www.marks.com/en/search-results.html?q=waterproof+winter+boots",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p7",
+      "gapKey": "winter-boots",
+      "name": "Insulated hiking-style snow boots",
+      "retailer": "Decathlon",
+      "priceCad": 90,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Waterproof",
+        "Rated to about -20\u00b0C",
+        "Light enough for daily walking"
+      ],
+      "url": "https://www.decathlon.ca/en/search?Ntt=snow+hiking+boots+warm+waterproof",
+      "priceCheckedOn": null,
+      "secondHandTip": "Often available second-hand for much less."
+    },
+    {
+      "id": "p8",
+      "gapKey": "toque",
+      "name": "Knit toque",
+      "retailer": "Walmart",
+      "priceCad": 10,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.9,
+      "features": [
+        "Covers ears",
+        "Acrylic knit"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=knit+toque",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p9",
+      "gapKey": "toque",
+      "name": "Fleece-lined toque",
+      "retailer": "Mark's",
+      "priceCad": 25,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Fleece lining",
+        "Windproof band"
+      ],
+      "url": "https://www.marks.com/en/search-results.html?q=fleece+lined+toque",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p10",
+      "gapKey": "mittens",
+      "name": "Insulated mittens",
+      "retailer": "Walmart",
+      "priceCad": 15,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.7,
+      "features": [
+        "Thinsulate-type insulation",
+        "Water resistant"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=insulated+mittens",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p11",
+      "gapKey": "mittens",
+      "name": "Touchscreen insulated gloves",
+      "retailer": "Mark's",
+      "priceCad": 30,
+      "tier": "value",
+      "suitability": 3,
+      "versatility": 0.9,
+      "features": [
+        "Use your phone without removing",
+        "Windproof"
+      ],
+      "url": "https://www.marks.com/en/search-results.html?q=insulated+touchscreen+gloves",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p12",
+      "gapKey": "mittens",
+      "name": "Heavy-duty winter mitts",
+      "retailer": "Canadian Tire",
+      "priceCad": 40,
+      "tier": "premium",
+      "suitability": 5,
+      "versatility": 0.6,
+      "features": [
+        "Rated for extreme cold",
+        "Long cuff"
+      ],
+      "url": "https://www.canadiantire.ca/en/search-results.html?q=winter+mitts",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p13",
+      "gapKey": "scarf",
+      "name": "Fleece neck warmer",
+      "retailer": "Walmart",
+      "priceCad": 10,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.8,
+      "features": [
+        "Pull up over your face",
+        "No ends to tie"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=fleece+neck+warmer",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p14",
+      "gapKey": "scarf",
+      "name": "Wool-blend scarf",
+      "retailer": "Uniqlo",
+      "priceCad": 30,
+      "tier": "value",
+      "suitability": 3,
+      "versatility": 0.9,
+      "features": [
+        "Soft",
+        "Dressier look"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=heattech+scarf",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p15",
+      "gapKey": "warm-mid",
+      "name": "Fleece jacket",
+      "retailer": "Decathlon",
+      "priceCad": 25,
+      "tier": "budget",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Warm for its weight",
+        "Dries quickly",
+        "Easy to take off indoors"
+      ],
+      "url": "https://www.decathlon.ca/en/search?Ntt=fleece+jacket",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p16",
+      "gapKey": "warm-mid",
+      "name": "Fleece full-zip",
+      "retailer": "Uniqlo",
+      "priceCad": 40,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Full zip",
+        "Many colours"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=fleece+full+zip+jacket",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p17",
+      "gapKey": "thermal-top",
+      "name": "Thermal long-sleeve top",
+      "retailer": "Uniqlo",
+      "priceCad": 25,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.8,
+      "features": [
+        "Thin, fits under anything",
+        "Extra warm weight"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=heattech+extra+warm+crew+neck",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p18",
+      "gapKey": "thermal-top",
+      "name": "Thermal base layer top",
+      "retailer": "Walmart",
+      "priceCad": 15,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.7,
+      "features": [
+        "Waffle knit",
+        "Cheap"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=thermal+top",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p19",
+      "gapKey": "thermal-bottoms",
+      "name": "Thermal leggings",
+      "retailer": "Uniqlo",
+      "priceCad": 25,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.7,
+      "features": [
+        "Thin under jeans",
+        "Extra warm weight"
+      ],
+      "url": "https://www.uniqlo.com/ca/en/search?q=heattech+tights+leggings",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p20",
+      "gapKey": "thermal-bottoms",
+      "name": "Thermal long johns",
+      "retailer": "Walmart",
+      "priceCad": 15,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.6,
+      "features": [
+        "Waffle knit"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=thermal+long+johns",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p21",
+      "gapKey": "rain-jacket",
+      "name": "Waterproof rain jacket",
+      "retailer": "Decathlon",
+      "priceCad": 35,
+      "tier": "budget",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Waterproof",
+        "Hood",
+        "Packs small"
+      ],
+      "url": "https://www.decathlon.ca/en/search?Ntt=waterproof+rain+jacket",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p22",
+      "gapKey": "rain-jacket",
+      "name": "Breathable rain shell",
+      "retailer": "Mark's",
+      "priceCad": 90,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Breathable",
+        "Sealed seams",
+        "Works as a winter wind shell"
+      ],
+      "url": "https://www.marks.com/en/search-results.html?q=waterproof+rain+jacket",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p23",
+      "gapKey": "wool-socks",
+      "name": "Wool-blend socks (3 pack)",
+      "retailer": "Mark's",
+      "priceCad": 20,
+      "tier": "budget",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Warm when damp",
+        "Cushioned"
+      ],
+      "url": "https://www.marks.com/en/search-results.html?q=wool+socks",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p24",
+      "gapKey": "wool-socks",
+      "name": "Merino wool hiking socks",
+      "retailer": "Decathlon",
+      "priceCad": 15,
+      "tier": "value",
+      "suitability": 4,
+      "versatility": 0.9,
+      "features": [
+        "Merino",
+        "Odour resistant"
+      ],
+      "url": "https://www.decathlon.ca/en/search?Ntt=merino+wool+socks",
+      "priceCheckedOn": null
+    },
+    {
+      "id": "p25",
+      "gapKey": "sunglasses",
+      "name": "UV400 sunglasses",
+      "retailer": "Walmart",
+      "priceCad": 15,
+      "tier": "budget",
+      "suitability": 3,
+      "versatility": 0.8,
+      "features": [
+        "Full UV protection"
+      ],
+      "url": "https://www.walmart.ca/en/search?q=uv400+sunglasses",
+      "priceCheckedOn": null
+    }
+  ]
+}
