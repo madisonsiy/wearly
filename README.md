@@ -2,6 +2,7 @@
 
 **An AI-powered wardrobe and weather assistant that helps newcomers dress for Canada's unpredictable weather in every season, using the clothes they already own, and build a wardrobe gradually within their budget.**
 
+**Team Members:** Madison, Navjot, Reham.
 Built for the ElleHacks × Hacktoberfest Hack Day 2026 (Best Open-Source AI Project).
 
 Wearly answers three connected questions:
