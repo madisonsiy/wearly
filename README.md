@@ -5,17 +5,18 @@
 **Award:** Best Open-Source AI Project  
 **Event:** ElleHacks × Hacktoberfest Hack Day 2026
 
-## Meet the Team
-
-Madison | Navjot | Reham
 
 ## About Wearly
 
 Wearly helps users make practical clothing decisions based on real-time weather conditions, daily routines, and their existing wardrobes. By combining AI-powered clothing recognition, personalized outfit recommendations, and budget-conscious shopping suggestions, Wearly makes adapting to Canada's changing seasons easier and more affordable.
 
-## Who it helps
-
 Newcomers to Canada (international students, new immigrants, refugees) facing their first Canadian winter, who don't know what wind chill means, don't own a parka yet, and can't afford to buy everything at once. It's useful for anyone who wants weather advice that fits their actual day.
+
+
+## Meet the Team
+
+Madison | Navjot | Reham
+
 
 ## Features (MVP)
 
