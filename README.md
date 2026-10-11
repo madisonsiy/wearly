@@ -1,16 +1,17 @@
 # Wearly
 
-**An AI-powered wardrobe and weather assistant that helps newcomers dress for Canada's unpredictable weather in every season, using the clothes they already own, and build a wardrobe gradually within their budget.**
+**An AI-powered wardrobe and weather assistant** designed to help newcomers to Canada adapt to unpredictable weather using the clothes they already own.
 
-**Team Members:** Madison, Navjot, Reham.
+**Award:** Best Open-Source AI Project  
+**Event:** ElleHacks × Hacktoberfest Hack Day 2026
 
-Built for the ElleHacks × Hacktoberfest Hack Day 2026 (Best Open-Source AI Project).
+## Meet the Team
 
-Wearly answers three connected questions:
+Madison | Navjot | Reham
 
-1. **What should I wear today?** Based on the real hourly forecast *and* when you're actually outside (commute, waiting for the bus, walking between buildings).
-2. **How can I make it work with what I own?** Outfits are built only from your wardrobe. When something essential is missing, it improvises (e.g. a windbreaker over two sweaters) and says clearly when that isn't enough.
-3. **What should I buy, if anything?** Wardrobe gaps ranked by importance and exposure, with a purchase plan that never exceeds your budget.
+## About Wearly
+
+Wearly helps users make practical clothing decisions based on real-time weather conditions, daily routines, and their existing wardrobes. By combining AI-powered clothing recognition, personalized outfit recommendations, and budget-conscious shopping suggestions, Wearly makes adapting to Canada's changing seasons easier and more affordable.
 
 ## Who it helps
 
